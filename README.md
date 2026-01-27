@@ -1,39 +1,84 @@
-# cicd-security-scanner
+# CICD Security Scanner
 
-> “Gitleaks analiza tanto el estado actual del repositorio como su historial de commits, permitiendo detectar secretos presentes en la última versión del código y aquellos que hayan sido eliminados pero expuestos previamente.”
+GitHub Action for scanning secrets in PRs using Gitleaks.
 
-Para usarlo en GitHub con GitHub Actions:
+## Features
 
-1. Añade tanto el Dockerfile como el scan.sh en la raíz del repositorio a escanear
-2. Añade secrets.yml en .github/workflows/ del repositorio
+✅ Scans only PR changes (diff)  
+✅ Redacts secrets in reports  
+✅ Creates automatic PR comments  
+✅ Blocks merge if secrets found  
+✅ Generates JSON reports for audit  
 
-Para usarlo en local clonado este repositorio:
+## Usage
 
-Requisitos:
+Create `.github/workflows/secrets.yaml`:
 
-- docker
+```yaml
+name: Secret Scanning
 
-1. Añade tanto el Dockerfile como el scan.sh en la raíz del repositorio a escanear
-2. Construye la imagen con docker:
+on:
+  pull_request:
+    branches: [ "main" ]
 
-  ```bash
-  docker build -t cicd-security-scanner .
-  ```
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: LauraWangQiu/cicd-security-scanner@v1
+        with:
+          base_ref: main
+```
 
-3. Corre un container con esa imagen construida:
+## Inputs
 
-  Windows
+| Input | Description | Default |
+|-------|-------------|---------|
+| `base_ref` | Base branch to compare against | `main` |
 
-  ```bash
-  docker run --rm `
-    -v <ruta_al_repositorio_a_escanear>:/scan `
-    cicd-security-scanner
-  ```
+## Outputs
 
-  Linux / MacOS
+Generates an artifact with:
 
-  ```zsh
-  docker run --rm \
-    -v "<ruta_al_repositorio_a_escanear>":/scan \
-    cicd-security-scanner
-  ```
+- `gitleaks.json` - Detailed scan report
+- `pr.diff` - Scanned diff
+- `metadata.txt` - Commit metadata
+
+## Requirements
+
+- GitHub Actions enabled
+- Docker available on runner
+
+## Real Example
+
+```yaml
+name: PR Security Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan for secrets
+        uses: LauraWangQiu/cicd-security-scanner@v1
+        with:
+          base_ref: ${{ github.base_ref }}
+```
+
+## Troubleshooting
+
+**Error: "docker build not found"**
+
+- Use `ubuntu-latest` as the runner
+
+**Secrets that should be detected aren't being found**
+
+- Check `.gitleaks.toml` in your repository
+- Ensure patterns are enabled
+
+## License
+
+MIT
