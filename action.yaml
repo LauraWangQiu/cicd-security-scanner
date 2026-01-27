@@ -2,6 +2,10 @@ name: 'CICD Security Scanner'
 description: 'Secret scanning with Gitleaks for PR diffs'
 author: 'LauraWangQiu'
 
+branding:
+  icon: 'shield'
+  color: 'red'
+
 inputs:
   base_ref:
     description: 'Base branch reference'
