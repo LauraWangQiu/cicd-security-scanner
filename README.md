@@ -25,7 +25,8 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: LauraWangQiu/cicd-security-scanner@v1
+      - name: Run scanner
+        uses: LauraWangQiu/cicd-security-scanner@v0
         with:
           base_ref: main
 ```
