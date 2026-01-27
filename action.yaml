@@ -51,7 +51,7 @@ runs:
       if: steps.check_secrets.outputs.found == 'true'
       uses: actions/upload-artifact@v6
       with:
-        name: gitleaks-report-${{ github.sha }}
+        name: ${{ github.sha }}
         path: reports/
 
     - name: Comment on PR
