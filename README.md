@@ -82,3 +82,16 @@ jobs:
 ## License
 
 MIT
+
+## Privacy & Security
+
+This Action:
+✅ Only reads PR diff (no Personal Data collected)
+✅ No data stored or transmitted externally
+✅ GDPR compliant
+✅ Open source and auditable
+
+## Support
+
+Issues: GitHub Issues
+Email: yiwang03@ucm.es
