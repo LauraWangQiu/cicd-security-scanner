@@ -58,20 +58,44 @@ module.exports = async ({ github, context }) => {
     });
   }
 
+  // Severity order for sorting (lower = more critical)
+  const severityOrder = { 'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3, 'UNKNOWN': 4 };
+
+  // Get highest severity for a package
+  const getHighestSeverity = (vulns) => {
+    return vulns.reduce((highest, v) => {
+      const currentOrder = severityOrder[v.severity] ?? 5;
+      const highestOrder = severityOrder[highest] ?? 5;
+      return currentOrder < highestOrder ? v.severity : highest;
+    }, 'UNKNOWN');
+  };
+
+  // Sort packages: first by severity (critical first), then alphabetically
+  const sortedPackages = Object.entries(vulnsByPackage).sort((a, b) => {
+    const [pkgA, vulnsA] = a;
+    const [pkgB, vulnsB] = b;
+    
+    const sevA = severityOrder[getHighestSeverity(vulnsA)] ?? 5;
+    const sevB = severityOrder[getHighestSeverity(vulnsB)] ?? 5;
+    
+    if (sevA !== sevB) return sevA - sevB;
+    return pkgA.toLowerCase().localeCompare(pkgB.toLowerCase());
+  });
+
   // Build summary comment
   let body = `## 🔓 Dependency Vulnerabilities Found\n\n`;
   body += `**Total:** ${results.length} vulnerability(ies)\n\n`;
   body += `| Package | Vulnerabilities | Severity |\n`;
   body += `|---------|-----------------|----------|\n`;
 
-  for (const [pkg, vulns] of Object.entries(vulnsByPackage)) {
+  for (const [pkg, vulns] of sortedPackages) {
     const severities = [...new Set(vulns.map(v => v.severity))].join(', ');
     body += `| \`${pkg}\` | ${vulns.length} | ${severities} |\n`;
   }
 
   body += `\n### Details\n\n`;
 
-  for (const [pkg, vulns] of Object.entries(vulnsByPackage)) {
+  for (const [pkg, vulns] of sortedPackages) {
     body += `<details>\n<summary><strong>${pkg}</strong> (${vulns.length})</summary>\n\n`;
     for (const v of vulns) {
       body += `- **${v.ruleId}**: ${v.message}\n`;
