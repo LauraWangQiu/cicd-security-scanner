@@ -1,4 +1,4 @@
-# CICD Security Scanner
+# CICD Secret Scanner
 
 GitHub Action for scanning secrets in Pull Requests using [Gitleaks](https://github.com/gitleaks/gitleaks).
 
@@ -41,7 +41,7 @@ jobs:
 
 When secrets are detected:
 
-- **Artifact** - `<sha>` with SARIF report
+- **Artifact** - `secrets-results-<sha>` with SARIF report
 - **PR Comments** - Inline comments on affected lines
 - **Workflow Failure** - Blocks the PR with error message
 

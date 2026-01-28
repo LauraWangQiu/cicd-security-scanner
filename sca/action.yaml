@@ -1,0 +1,64 @@
+name: 'CICD SCA Scanner'
+description: 'Dependency vulnerability scanning with Trivy for PR diffs'
+author: 'LauraWangQiu'
+
+branding:
+  icon: 'package'
+  color: 'orange'
+
+inputs:
+  severity:
+    description: 'Minimum severity to report (CRITICAL, HIGH, MEDIUM, LOW)'
+    required: false
+    default: 'HIGH,CRITICAL'
+  fail_on_vulnerabilities:
+    description: 'Fail the workflow if vulnerabilities are found'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Build SCA scanner image
+      shell: bash
+      run: docker build -t cicd-sca-scanner ${{ github.action_path }}
+
+    - name: Run SCA scanning
+      shell: bash
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/scan \
+          -e SEVERITY=${{ inputs.severity }} \
+          cicd-sca-scanner
+
+    - name: Check for vulnerabilities in results
+      id: check_vulns
+      shell: bash
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/check-results.sh
+        ${{ github.action_path }}/scripts/check-results.sh results.sarif >> $GITHUB_OUTPUT
+
+    - name: Upload SARIF artifact
+      if: steps.check_vulns.outputs.found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: sca-results-${{ github.sha }}
+        path: results.sarif
+
+    - name: Comment vulnerabilities on PR
+      if: steps.check_vulns.outputs.found == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const script = require('${{ github.action_path }}/scripts/comment-vulnerabilities.js');
+          await script({ github, context });
+
+    - name: Fail if vulnerabilities found
+      if: steps.check_vulns.outputs.found == 'true' && inputs.fail_on_vulnerabilities == 'true'
+      shell: bash
+      run: |
+        echo "::error::Found ${{ steps.check_vulns.outputs.count }} vulnerability(ies) in dependencies"
+        exit 1
