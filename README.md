@@ -1,14 +1,14 @@
 # CICD Security Scanner
 
-GitHub Action for scanning secrets in PRs using Gitleaks.
+GitHub Action for scanning secrets in Pull Requests using [Gitleaks](https://github.com/gitleaks/gitleaks).
 
 ## Features
 
-✅ Scans only PR changes (diff)  
-✅ Redacts secrets in reports  
-✅ Creates automatic PR comments  
+✅ Scans only PR changes (diff-based)  
+✅ Inline PR comments on detected secrets  
+✅ SARIF format reports  
 ✅ Blocks merge if secrets found  
-✅ Generates JSON reports for audit  
+✅ Uploads artifacts for audit  
 
 ## Usage
 
@@ -25,29 +25,43 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - name: Run scanner
-        uses: LauraWangQiu/cicd-security-scanner@v0
+      - name: Scan for secrets
+        uses: LauraWangQiu/cicd-security-scanner@v1
         with:
           base_ref: main
 ```
 
 ## Inputs
 
-| Input | Description | Default |
-|-------|-------------|---------|
-| `base_ref` | Base branch to compare against | `main` |
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `base_ref` | Base branch to compare against | No | `main` |
 
 ## Outputs
 
-Generates an artifact with:
+When secrets are detected:
 
-- `gitleaks.json` - Detailed scan report
-- `pr.diff` - Scanned diff
+- **Artifact** - `<sha>` with SARIF report
+- **PR Comments** - Inline comments on affected lines
+- **Workflow Failure** - Blocks the PR with error message
 
 ## Requirements
 
 - GitHub Actions enabled
-- Docker available on runner
+- Docker available on runner (default on `ubuntu-latest`)
+
+## Project Structure
+
+```
+cicd-security-scanner/
+├── action.yaml              # Action definition
+├── Dockerfile               # Scanner container (Gitleaks 8.30.0)
+├── scripts/
+│   ├── scan.sh              # Gitleaks execution
+│   ├── check-secrets.sh     # SARIF results parser
+│   └── comment-secrets.js   # PR comment generator
+└── README.md
+```
 
 ## Real Example
 
@@ -63,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan for secrets
-        uses: LauraWangQiu/cicd-security-scanner@v0
+        uses: LauraWangQiu/cicd-security-scanner@v1
         with:
           base_ref: ${{ github.base_ref }}
 ```
@@ -86,12 +100,12 @@ MIT
 ## Privacy & Security
 
 This Action:  
-✅ Only reads PR diff (no Personal Data collected)  
+✅ Only reads PR diff (no personal data collected)  
 ✅ No data stored or transmitted externally  
 ✅ GDPR compliant  
 ✅ Open source and auditable
 
 ## Support
 
-Issues: GitHub Issues  
+Issues: [GitHub Issues](https://github.com/LauraWangQiu/cicd-security-scanner/issues)  
 Email: yiwang03@ucm.es
