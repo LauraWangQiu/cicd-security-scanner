@@ -108,4 +108,4 @@ This Action:
 ## Support
 
 Issues: [GitHub Issues](https://github.com/LauraWangQiu/cicd-security-scanner/issues)  
-Email: yiwang03@ucm.es
+Email: yiwang03@ucm.es | lauraonetwo443@gmail.com
