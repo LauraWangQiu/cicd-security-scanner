@@ -43,7 +43,6 @@ Generates an artifact with:
 
 - `gitleaks.json` - Detailed scan report
 - `pr.diff` - Scanned diff
-- `metadata.txt` - Commit metadata
 
 ## Requirements
 

@@ -59,11 +59,12 @@ runs:
       uses: actions/github-script@v7
       with:
         script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
+          github.rest.pulls.createReview({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: `⚠️ **Secret Scanning Alert** ⚠️\n\n🔐 Potential secrets detected in this PR!\n\n**Action Required:**\n- ❌ Do NOT merge\n- 🔄 Rotate exposed secrets immediately\n- 🧹 Remove secrets from code\n- 📝 Force push to update commits\n- ✅ Re-run scan\n\nCheck [detailed report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
+            pull_number: context.issue.number,
+            body: `⚠️ **Secret Scanning Alert** ⚠️\n\n🔐 Potential secrets detected in this PR!\n\n**Action Required:**\n- ❌ Do NOT merge\n- 🔄 Rotate exposed secrets immediately\n- 🧹 Remove secrets from code\n- 📝 Force push to update commits\n- ✅ Re-run scan\n\nCheck [detailed report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).`,
+            event: 'COMMENT'
           })
 
     - name: Fail if secrets found
