@@ -63,36 +63,31 @@ runs:
           const sarif = JSON.parse(fs.readFileSync('results.sarif', 'utf8'));
           const results = sarif.runs?.[0]?.results || [];
 
-          if (results.length === 0) {
-            console.log("No SARIF results.");
-            return;
-          }
+          if (results.length === 0) return;
 
           const { owner, repo } = context.repo;
           const pull_number = context.issue.number;
 
-          // Obtener commit HEAD del PR
           const { data: pr } = await github.rest.pulls.get({
-            owner,
-            repo,
-            pull_number,
+            owner, repo, pull_number,
           });
 
           const commitId = pr.head.sha;
 
-          // Obtener patch del PR
           const { data: files } = await github.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number,
-            per_page: 100,
+            owner, repo, pull_number, per_page: 100,
           });
 
-          // Construir mapa path -> line -> position (diff)
+          // Detectar qué ficheros son nuevos
+          const newFiles = new Set(
+            files.filter(f => f.status === "added").map(f => f.filename)
+          );
+
+          // Construir positionMap solo para modificados
           const positionMap = {};
 
           for (const file of files) {
-            if (!file.patch) continue;
+            if (!file.patch || file.status === "added") continue;
 
             const lines = file.patch.split('\n');
             let position = 0;
@@ -117,9 +112,6 @@ runs:
             }
           }
 
-          console.log("Position map built");
-
-          // Comentar cada secreto encontrado
           for (const r of results) {
             const loc = r.locations?.[0]?.physicalLocation;
             if (!loc) continue;
@@ -127,36 +119,52 @@ runs:
             const path = loc.artifactLocation.uri;
             const line = loc.region.startLine;
 
-            const pos = positionMap[path]?.[line];
-            if (!pos) {
-              console.log(`No diff position for ${path}:${line}`);
-              continue;
-            }
-
             const rule = r.ruleId || "Secret detected";
             const message = r.message?.text || "Potential secret found";
 
+            const body = `🔐 **Secret detected by Gitleaks**
+
+            **Rule:** ${rule}  
+            **Details:** ${message}
+
+            ❌ Remove and rotate this secret.`;
+
             try {
-              await github.rest.pulls.createReviewComment({
-                owner,
-                repo,
-                pull_number,
-                commit_id: commitId,
-                path: path,
-                position: pos,
-                body: `🔐 **Secret detected by Gitleaks**
+              if (newFiles.has(path)) {
+                // Para ficheros nuevos
+                await github.rest.pulls.createReview({
+                  owner,
+                  repo,
+                  pull_number,
+                  event: "COMMENT",
+                  comments: [{
+                    path,
+                    line,
+                    side: "RIGHT",
+                    body
+                  }]
+                });
+                console.log(`Commented (new file) on ${path}:${line}`);
+              } else {
+                // Para modificados
+                const pos = positionMap[path]?.[line];
+                if (!pos) continue;
 
-                **Rule:** ${rule}  
-                **Details:** ${message}
-
-                ❌ Remove this secret and rotate it immediately.`,
-                          });
-
-                          console.log(`Commented on ${path}:${line}`);
-                        } catch (e) {
-                          console.log(`Failed on ${path}:${line}: ${e.message}`);
-                        }
-                      }
+                await github.rest.pulls.createReviewComment({
+                  owner,
+                  repo,
+                  pull_number,
+                  commit_id: commitId,
+                  path,
+                  position: pos,
+                  body
+                });
+                console.log(`Commented on ${path}:${line}`);
+              }
+            } catch (e) {
+              console.log(`Failed on ${path}:${line}: ${e.message}`);
+            }
+          }
 
     - name: Fail if secrets found
       if: steps.check_secrets.outputs.found == 'true'
