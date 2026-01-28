@@ -48,6 +48,7 @@ runs:
         echo "found=false" >> $GITHUB_OUTPUT
 
     - name: Upload SARIF artifact
+      if: steps.check_secrets.outputs.found == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ github.sha }}
@@ -58,122 +59,8 @@ runs:
       uses: actions/github-script@v7
       with:
         script: |
-          const fs = require('fs');
-
-          const sarif = JSON.parse(fs.readFileSync('results.sarif', 'utf8'));
-          const results = sarif.runs?.[0]?.results || [];
-
-          if (results.length === 0) return;
-
-          const { owner, repo } = context.repo;
-          const pull_number = context.issue.number;
-
-          const { data: pr } = await github.rest.pulls.get({
-            owner, repo, pull_number,
-          });
-
-          const commitId = pr.head.sha;
-
-          const { data: files } = await github.rest.pulls.listFiles({
-            owner, repo, pull_number, per_page: 100,
-          });
-
-          // Detectar qué ficheros son nuevos
-          const newFiles = new Set(
-            files.filter(f => f.status === "added").map(f => f.filename)
-          );
-
-          // Construir positionMap solo para modificados
-          const positionMap = {};
-
-          for (const file of files) {
-            if (!file.patch) continue;
-
-            const lines = file.patch.split('\n');
-            let position = 0;
-
-            let fileLine = 0;     // línea real del fichero (post-PR)
-            let hunkStart = 0;    // +c del @@
-
-            for (const l of lines) {
-              position++;
-
-              if (l.startsWith('@@')) {
-                const match = /\+(\d+)/.exec(l);
-                if (match) {
-                  fileLine = parseInt(match[1], 10) - 1;
-                  hunkStart = fileLine;
-                }
-                continue;
-              }
-
-              // Ignorar headers
-              if (l.startsWith('+++') || l.startsWith('---')) continue;
-
-              // Solo avanzar línea de fichero si no es borrado puro
-              if (!l.startsWith('-')) {
-                fileLine++;
-              }
-
-              // Mapear línea REAL del fichero → position
-              if (!positionMap[file.filename]) positionMap[file.filename] = {};
-              positionMap[file.filename][fileLine] = position;
-            }
-          }
-
-          for (const r of results) {
-            const loc = r.locations?.[0]?.physicalLocation;
-            if (!loc) continue;
-
-            const path = loc.artifactLocation.uri;
-            const line = loc.region.startLine;
-
-            const rule = r.ruleId || "Secret detected";
-            const message = r.message?.text || "Potential secret found";
-
-            const body = `🔐 **Secret detected by Gitleaks**
-
-            **Rule:** ${rule}  
-            **Details:** ${message}
-
-            ❌ Remove and rotate this secret.`;
-
-            try {
-              if (newFiles.has(path)) {
-                // Para ficheros nuevos
-                await github.rest.pulls.createReview({
-                  owner,
-                  repo,
-                  pull_number,
-                  event: "COMMENT",
-                  comments: [{
-                    path,
-                    line,
-                    side: "RIGHT",
-                    body
-                  }]
-                });
-                console.log(`Commented (new file) on ${path}:${line}`);
-              } else {
-                // Para modificados
-                const pos = positionMap[path]?.[line];
-                if (!pos) continue;
-
-                await github.rest.pulls.createReviewComment({
-                  owner,
-                  repo,
-                  pull_number,
-                  commit_id: commitId,
-                  path,
-                  position: pos,
-                  body
-                });
-                console.log(`Commented on ${path}:${line}`);
-              }
-            } catch (e) {
-              console.log(`Failed on ${path}:${line}: ${e.message}`);
-            }
-          }
+          const script = require('${{ github.action_path }}/scripts/comment-secrets.js');
+          await script({ github, context });
 
     - name: Fail if secrets found
       if: steps.check_secrets.outputs.found == 'true'
