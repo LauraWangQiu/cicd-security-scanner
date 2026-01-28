@@ -50,6 +50,7 @@ runs:
     - name: Upload SARIF artifact
       uses: actions/upload-artifact@v4
       with:
+        name: ${{ github.sha }}
         path: results.sarif
 
     - name: Comment on PR

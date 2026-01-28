@@ -2,20 +2,38 @@
 set -e
 
 TARGET=/scan
-DIFF_FILE_PATH="pr.diff"
-LEAKS_FILE_PATH="results.sarif"
+DIFF_FILES="pr.diff"
+LEAKS_FILE="results.sarif"
 
 BASE_REF=${GITHUB_BASE_REF:-main}
 
 git config --global --add safe.directory "$TARGET"
 cd "$TARGET"
 
-git diff origin/$BASE_REF...HEAD > "$DIFF_FILE_PATH" 2>/dev/null || true
+git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > $DIFF_FILES || true
 
-echo "[*] Running Gitleaks..."
-gitleaks detect \
-  --source "$DIFF_FILE_PATH" \
-  --no-git \
-  --report-format sarif \
-  --report-path "$LEAKS_FILE_PATH" \
-  --redact || true
+echo '{"runs":[]}' > "$LEAKS_FILE"
+
+echo "[*] Running Gitleaks per file..."
+
+while read -r file; do
+  [ -f "$file" ] || continue
+
+  echo "  → scanning $file"
+
+  TMP_SARIF=$(mktemp)
+
+  gitleaks dir "$file" \
+    --report-format sarif \
+    --report-path "$TMP_SARIF" \
+    --redact || true
+
+  jq --slurp '
+    .[0].runs += .[1].runs
+    | .[0]
+  ' "$LEAKS_FILE" "$TMP_SARIF" > "${LEAKS_FILE}.tmp"
+
+  mv "${LEAKS_FILE}.tmp" "$LEAKS_FILE"
+  rm "$TMP_SARIF"
+
+done < "$DIFF_FILES"
