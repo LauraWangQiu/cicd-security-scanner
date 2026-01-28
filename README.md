@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan for secrets
-        uses: LauraWangQiu/cicd-security-scanner@v1
+        uses: LauraWangQiu/cicd-security-scanner@v0
         with:
           base_ref: ${{ github.base_ref }}
 ```
@@ -87,9 +87,9 @@ MIT
 ## Privacy & Security
 
 This Action:
-✅ Only reads PR diff (no Personal Data collected)
-✅ No data stored or transmitted externally
-✅ GDPR compliant
+✅ Only reads PR diff (no Personal Data collected)  
+✅ No data stored or transmitted externally  
+✅ GDPR compliant  
 ✅ Open source and auditable
 
 ## Support
