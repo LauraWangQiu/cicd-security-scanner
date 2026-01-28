@@ -86,7 +86,7 @@ MIT
 
 ## Privacy & Security
 
-This Action:
+This Action:  
 ✅ Only reads PR diff (no Personal Data collected)  
 ✅ No data stored or transmitted externally  
 ✅ GDPR compliant  
