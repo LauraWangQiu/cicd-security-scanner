@@ -4,36 +4,50 @@ set -e
 TARGET=/scan
 DIFF_FILES="pr.diff"
 LEAKS_FILE="results.sarif"
+TMP_DIR="sarif_parts"
 
 BASE_REF=${GITHUB_BASE_REF:-main}
 
 git config --global --add safe.directory "$TARGET"
 cd "$TARGET"
 
-git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > $DIFF_FILES || true
+git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > "$DIFF_FILES" || true
 
-echo '{"runs":[]}' > "$LEAKS_FILE"
+mkdir -p "$TMP_DIR"
+rm -f "$TMP_DIR"/*.sarif
 
-echo "[*] Running Gitleaks per file..."
+echo "[*] Running Gitleaks per changed file..."
 
-while read -r file; do
-  [ -f "$file" ] || continue
+i=0
+while IFS= read -r path; do
+  # saltar líneas vacías
+  [ -z "$path" ] && continue
 
-  echo "  → scanning $file"
+  # saltar si el fichero ya no existe (renames/deletes raros)
+  [ ! -f "$path" ] && continue
 
-  TMP_SARIF=$(mktemp)
+  part="$TMP_DIR/part_$i.sarif"
 
-  gitleaks dir "$file" \
+  echo "  -> Scanning $path"
+  gitleaks dir "$path" \
     --report-format sarif \
-    --report-path "$TMP_SARIF" \
+    --report-path "$part" \
     --redact || true
 
-  jq --slurp '
-    .[0].runs += .[1].runs
-    | .[0]
-  ' "$LEAKS_FILE" "$TMP_SARIF" > "${LEAKS_FILE}.tmp"
-
-  mv "${LEAKS_FILE}.tmp" "$LEAKS_FILE"
-  rm "$TMP_SARIF"
-
+  i=$((i+1))
 done < "$DIFF_FILES"
+
+echo "[*] Merging SARIF files..."
+
+# Crear SARIF final válido combinando results
+jq -s '
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": (.[0].runs[0].tool),
+      "results": (map(.runs[0].results) | add)
+    }
+  ]
+}
+' "$TMP_DIR"/*.sarif > "$LEAKS_FILE"
