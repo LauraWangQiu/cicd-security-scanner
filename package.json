@@ -1,0 +1,10 @@
+{
+  "name": "cicd-security-scanner",
+  "version": "1.0.0",
+  "description": "Secret scanning with Gitleaks for PR diffs",
+  "main": "index.js",
+  "dependencies": {
+    "@actions/core": "^2.0.3",
+    "@octokit/rest": "^22.0.1"
+  }
+}
