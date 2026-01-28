@@ -91,24 +91,33 @@ runs:
 
             const lines = file.patch.split('\n');
             let position = 0;
-            let newLine = 0;
+
+            let fileLine = 0;     // línea real del fichero (post-PR)
+            let hunkStart = 0;    // +c del @@
 
             for (const l of lines) {
               position++;
 
               if (l.startsWith('@@')) {
                 const match = /\+(\d+)/.exec(l);
-                if (match) newLine = parseInt(match[1], 10) - 1;
+                if (match) {
+                  fileLine = parseInt(match[1], 10) - 1;
+                  hunkStart = fileLine;
+                }
                 continue;
               }
 
-              // CUALQUIER línea del hunk cuenta, no solo '+'
-              if (!l.startsWith('+++') && !l.startsWith('---')) {
-                newLine++;
+              // Ignorar headers
+              if (l.startsWith('+++') || l.startsWith('---')) continue;
 
-                if (!positionMap[file.filename]) positionMap[file.filename] = {};
-                positionMap[file.filename][newLine] = position;
+              // Solo avanzar línea de fichero si no es borrado puro
+              if (!l.startsWith('-')) {
+                fileLine++;
               }
+
+              // Mapear línea REAL del fichero → position
+              if (!positionMap[file.filename]) positionMap[file.filename] = {};
+              positionMap[file.filename][fileLine] = position;
             }
           }
 
