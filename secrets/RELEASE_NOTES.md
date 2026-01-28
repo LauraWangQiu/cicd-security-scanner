@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan for secrets
-        uses: LauraWangQiu/cicd-security-scanner@v1
+        uses: LauraWangQiu/cicd-security-scanner/secrets@v1
         with:
           base_ref: main
 ```
@@ -63,13 +63,14 @@ When secrets are detected:
 
 ```
 cicd-security-scanner/
-├── action.yaml              # Action definition
-├── Dockerfile               # Scanner container
-├── scripts/
-│   ├── scan.sh              # Gitleaks execution script
-│   ├── check-secrets.sh     # SARIF results parser
-│   └── comment-secrets.js   # PR comment generator
-└── README.md
+└── secrets/
+    ├── action.yaml              # Action definition
+    ├── Dockerfile               # Scanner container
+    ├── scripts/
+    │   ├── scan.sh              # Gitleaks execution script
+    │   ├── check-secrets.sh     # SARIF results parser
+    │   └── comment-secrets.js   # PR comment generator
+    └── README.md
 ```
 
 ---
