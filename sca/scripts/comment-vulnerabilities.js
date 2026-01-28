@@ -3,19 +3,46 @@ const fs = require('fs');
 module.exports = async ({ github, context }) => {
   const sarif = JSON.parse(fs.readFileSync('results.sarif', 'utf8'));
   const results = sarif.runs?.[0]?.results || [];
+  const rules = sarif.runs?.[0]?.tool?.driver?.rules || [];
 
   if (results.length === 0) return;
 
   const { owner, repo } = context.repo;
   const pull_number = context.issue.number;
 
+  // Build rule index for severity lookup
+  const ruleIndex = {};
+  for (const rule of rules) {
+    ruleIndex[rule.id] = rule;
+  }
+
+  // Extract severity from SARIF (Trivy stores it in rule properties or message)
+  const getSeverity = (result) => {
+    // Try rule properties first
+    const rule = ruleIndex[result.ruleId];
+    if (rule?.properties?.['security-severity']) {
+      const score = parseFloat(rule.properties['security-severity']);
+      if (score >= 9.0) return 'CRITICAL';
+      if (score >= 7.0) return 'HIGH';
+      if (score >= 4.0) return 'MEDIUM';
+      return 'LOW';
+    }
+    // Try message text
+    const msg = result.message?.text || '';
+    const severityMatch = msg.match(/Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW)/i);
+    if (severityMatch) return severityMatch[1].toUpperCase();
+    // Fallback
+    return 'UNKNOWN';
+  };
+
   // Group vulnerabilities by package
   const vulnsByPackage = {};
   for (const r of results) {
     const ruleId = r.ruleId || 'Unknown';
     const message = r.message?.text || 'Vulnerability detected';
+    const severity = getSeverity(r);
     
-    // Extract package name from rule or message
+    // Extract package name from message
     const packageMatch = message.match(/Package:\s*(\S+)/i) || 
                          message.match(/in\s+(\S+)/i) ||
                          [null, ruleId];
@@ -27,7 +54,7 @@ module.exports = async ({ github, context }) => {
     vulnsByPackage[packageName].push({
       ruleId,
       message,
-      severity: r.level || 'warning'
+      severity
     });
   }
 
