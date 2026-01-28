@@ -87,7 +87,7 @@ runs:
           const positionMap = {};
 
           for (const file of files) {
-            if (!file.patch || file.status === "added") continue;
+            if (!file.patch) continue;
 
             const lines = file.patch.split('\n');
             let position = 0;
@@ -102,12 +102,12 @@ runs:
                 continue;
               }
 
-              if (l.startsWith('+') && !l.startsWith('+++')) {
+              // CUALQUIER línea del hunk cuenta, no solo '+'
+              if (!l.startsWith('+++') && !l.startsWith('---')) {
                 newLine++;
+
                 if (!positionMap[file.filename]) positionMap[file.filename] = {};
                 positionMap[file.filename][newLine] = position;
-              } else if (!l.startsWith('-')) {
-                newLine++;
               }
             }
           }
