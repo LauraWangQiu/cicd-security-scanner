@@ -1,0 +1,75 @@
+name: 'CICD Container Scanner'
+description: 'Container image vulnerability scanning with Trivy'
+author: 'LauraWangQiu'
+
+branding:
+  icon: 'box'
+  color: 'green'
+
+inputs:
+  image:
+    description: 'Container image to scan (e.g., nginx:latest, myapp:v1.0)'
+    required: false
+    default: ''
+  severity:
+    description: 'Minimum severity to report (CRITICAL, HIGH, MEDIUM, LOW)'
+    required: false
+    default: 'HIGH,CRITICAL'
+  fail_on_vulnerabilities:
+    description: 'Fail the workflow if vulnerabilities are found'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Build container scanner image
+      shell: bash
+      run: docker build -t cicd-container-scanner ${{ github.action_path }}
+
+    - name: Run container scanning
+      shell: bash
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/scan \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -e IMAGE=${{ inputs.image }} \
+          -e SEVERITY=${{ inputs.severity }} \
+          cicd-container-scanner
+
+    - name: Check for vulnerabilities
+      id: check_vulns
+      shell: bash
+      run: |
+        if [ -f results.sarif ]; then
+          COUNT=$(jq '.runs[0].results | length' results.sarif 2>/dev/null || echo "0")
+          if [ "$COUNT" -gt 0 ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "count=$COUNT" >> $GITHUB_OUTPUT
+          fi
+        fi
+        echo "found=false" >> $GITHUB_OUTPUT
+
+    - name: Upload SARIF artifact
+      if: steps.check_vulns.outputs.found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: container-results-${{ github.sha }}
+        path: results.sarif
+
+    - name: Upload SARIF to GitHub Security
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+      continue-on-error: true
+
+    - name: Fail if vulnerabilities detected
+      if: inputs.fail_on_vulnerabilities == 'true' && steps.check_vulns.outputs.found == 'true'
+      shell: bash
+      run: |
+        echo "❌ Container scan found ${{ steps.check_vulns.outputs.count }} vulnerabilities"
+        exit 1

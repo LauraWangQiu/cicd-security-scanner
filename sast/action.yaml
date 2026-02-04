@@ -1,0 +1,72 @@
+name: 'CICD SAST Scanner'
+description: 'Static Application Security Testing with Semgrep'
+author: 'LauraWangQiu'
+
+branding:
+  icon: 'code'
+  color: 'purple'
+
+inputs:
+  config:
+    description: 'Semgrep config (auto, p/ci, p/security-audit, etc.)'
+    required: false
+    default: 'auto'
+  fail_on_findings:
+    description: 'Fail the workflow if findings are found'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Build SAST scanner image
+      shell: bash
+      run: docker build -t cicd-sast-scanner ${{ github.action_path }}
+
+    - name: Run SAST scanning
+      shell: bash
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/scan \
+          -e SEMGREP_CONFIG=${{ inputs.config }} \
+          cicd-sast-scanner
+
+    - name: Check for findings in results
+      id: check_findings
+      shell: bash
+      run: |
+        if [ -f results.sarif ]; then
+          COUNT=$(jq '.runs[0].results | length' results.sarif 2>/dev/null || echo "0")
+          if [ "$COUNT" -gt 0 ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "count=$COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "found=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Upload SARIF artifact
+      if: steps.check_findings.outputs.found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: sast-results-${{ github.sha }}
+        path: results.sarif
+
+    - name: Upload SARIF to GitHub Security
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+      continue-on-error: true
+
+    - name: Fail if findings detected
+      if: inputs.fail_on_findings == 'true' && steps.check_findings.outputs.found == 'true'
+      shell: bash
+      run: |
+        echo "❌ SAST found ${{ steps.check_findings.outputs.count }} security issues"
+        exit 1

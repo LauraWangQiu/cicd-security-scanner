@@ -1,0 +1,61 @@
+# Example workflow using all CICD Security Scanner modules
+name: Security Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  secrets-scan:
+    name: 🔐 Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: LauraWangQiu/cicd-security-scanner/secrets@main
+        with:
+          base_ref: ${{ github.base_ref || 'main' }}
+
+  sca-scan:
+    name: 📦 Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: LauraWangQiu/cicd-security-scanner/sca@main
+        with:
+          severity: 'HIGH,CRITICAL'
+          fail_on_vulnerabilities: 'true'
+
+  sast-scan:
+    name: 🔍 Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: LauraWangQiu/cicd-security-scanner/sast@main
+        with:
+          config: 'auto'
+          fail_on_findings: 'true'
+
+  iac-scan:
+    name: 🏗️ Infrastructure as Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: LauraWangQiu/cicd-security-scanner/iac@main
+        with:
+          framework: 'all'
+          fail_on_findings: 'true'
+
+  security-gate:
+    name: 🚦 Security Gate
+    needs: [secrets-scan, sca-scan, sast-scan, iac-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all scans passed
+        run: |
+          if [ "${{ needs.secrets-scan.result }}" == "failure" ] || \
+             [ "${{ needs.sca-scan.result }}" == "failure" ] || \
+             [ "${{ needs.sast-scan.result }}" == "failure" ] || \
+             [ "${{ needs.iac-scan.result }}" == "failure" ]; then
+            echo "❌ Security gate failed - fix vulnerabilities before merging"
+            exit 1
+          fi
+          echo "✅ All security checks passed"
