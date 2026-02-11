@@ -49,6 +49,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  security-events: write
+
 # ──────────────────────────────────────────────
 #  MANUAL / PR: Secrets
 # ──────────────────────────────────────────────
