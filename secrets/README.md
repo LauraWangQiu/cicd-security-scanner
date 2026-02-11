@@ -4,11 +4,20 @@ GitHub Action for scanning secrets in Pull Requests using [Gitleaks](https://git
 
 ## Features
 
-✅ Scans only PR changes (diff-based)  
+✅ **Three scan modes**: PR changes, git history, or current files  
 ✅ Inline PR comments on detected secrets  
 ✅ SARIF format reports  
 ✅ Blocks merge if secrets found  
 ✅ Uploads artifacts for audit  
+
+## Scan Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `pr` | Scans only files changed in PR | CI/CD on Pull Requests |
+| `history` | Scans entire git commit history | Full repo audit, finds secrets in old commits |
+| `files` | Scans current files on disk | Local testing, includes uncommitted changes |
+| `auto` | Auto-detects (PR in CI, files locally) | Default behavior |
 
 ## Usage
 
@@ -36,6 +45,7 @@ jobs:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `base_ref` | Base branch to compare against | No | `main` |
+| `scan_mode` | Scan mode: `pr`, `history`, `files`, `auto` | No | `auto` |
 
 ## Outputs
 
@@ -44,6 +54,34 @@ When secrets are detected:
 - **Artifact** - `secrets-results-<sha>` with SARIF report
 - **PR Comments** - Inline comments on affected lines
 - **Workflow Failure** - Blocks the PR with error message
+
+## Local Usage (Docker)
+
+Build the scanner image:
+
+```bash
+cd cicd-security-scanner/secrets
+docker build -t cicd-secret-scanner .
+```
+
+Run with different modes:
+
+```bash
+# Scan current files (default, includes uncommitted changes)
+docker run -v /path/to/repo:/scan cicd-secret-scanner
+
+# Scan current files explicitly
+docker run -v /path/to/repo:/scan -e SCAN_MODE=files cicd-secret-scanner
+
+# Scan entire git history (all commits)
+docker run -v /path/to/repo:/scan -e SCAN_MODE=history cicd-secret-scanner
+```
+
+**Windows PowerShell:**
+```powershell
+docker run -v C:\path\to\repo:/scan cicd-secret-scanner
+docker run -v C:\path\to\repo:/scan -e SCAN_MODE=history cicd-secret-scanner
+```
 
 ## Requirements
 

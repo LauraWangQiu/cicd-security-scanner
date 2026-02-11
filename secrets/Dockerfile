@@ -10,6 +10,7 @@ RUN curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAK
     | tar -xz -C /usr/local/bin gitleaks
 
 COPY scripts/scan.sh /scan.sh
-RUN chmod +x /scan.sh
+# Fix line endings (CRLF->LF) for cross-platform compatibility
+RUN sed -i 's/\r$//' /scan.sh && chmod +x /scan.sh
 
 ENTRYPOINT ["/scan.sh"]

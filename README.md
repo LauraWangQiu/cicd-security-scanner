@@ -32,17 +32,55 @@ cicd-security-scanner/
 
 ## 🚀 Uso Rápido
 
-### Opción 1: Workflow completo
+### Opción 1: Workflow completo (manual)
 
 ```yaml
 # .github/workflows/security.yaml
 name: Security Pipeline
 
-on: [pull_request]
+on:
+  workflow_dispatch:
+    inputs:
+      scan_secrets:
+        description: 'Run Secrets scan'
+        required: false
+        default: true
+        type: boolean
+      secrets_mode:
+        description: 'Secret scan mode (only if scan_secrets is true)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - files
+          - history
+      scan_sast:
+        description: 'Run SAST scan'
+        required: false
+        default: true
+        type: boolean
+      scan_sca:
+        description: 'Run SCA scan'
+        required: false
+        default: true
+        type: boolean
+      scan_iac:
+        description: 'Run IaC scan'
+        required: false
+        default: true
+        type: boolean
+      scan_containers:
+        description: 'Run Container scan'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   secrets:
     uses: LauraWangQiu/cicd-security-scanner/secrets@main
+    with:
+      scan_mode: ${{ inputs.secrets_mode }}
   sca:
     uses: LauraWangQiu/cicd-security-scanner/sca@main
   sast:
@@ -53,7 +91,35 @@ jobs:
     uses: LauraWangQiu/cicd-security-scanner/containers@main
 ```
 
-### Opción 2: Módulos individuales
+### Opción 2: Ejemplo para PRs (escaneo en pull_request con `scan_mode`)
+
+```yaml
+# .github/workflows/security-pr.yaml
+name: Security Pipeline (PR)
+
+on: [pull_request]
+
+jobs:
+  secrets:
+    uses: LauraWangQiu/cicd-security-scanner/secrets@main
+    with:
+      scan_mode: 'pr'
+      base_ref: ${{ github.base_ref }}
+
+  sca:
+    uses: LauraWangQiu/cicd-security-scanner/sca@main
+
+  sast:
+    uses: LauraWangQiu/cicd-security-scanner/sast@main
+
+  iac:
+    uses: LauraWangQiu/cicd-security-scanner/iac@main
+
+  containers:
+    uses: LauraWangQiu/cicd-security-scanner/containers@main
+```
+
+### Opción 3: Módulos individuales
 
 ```yaml
 - uses: LauraWangQiu/cicd-security-scanner/sast@main
@@ -84,9 +150,7 @@ docker run --rm -v $(pwd):/scan scanner-iac
 
 ## 📊 Salidas
 
-Todos los módulos generan:
-- `results.sarif` - Formato estándar para GitHub Security tab
-- `results.json` - JSON detallado para análisis
+Todos los módulos generan un `results.sarif`
 
 ## ⚙️ Configuración
 
