@@ -43,9 +43,12 @@ runs:
           if [ "$COUNT" -gt 0 ]; then
             echo "found=true" >> $GITHUB_OUTPUT
             echo "count=$COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
           fi
+        else
+          echo "found=false" >> $GITHUB_OUTPUT
         fi
-        echo "found=false" >> $GITHUB_OUTPUT
 
     - name: Upload SARIF artifact
       if: steps.check_findings.outputs.found == 'true'

@@ -47,6 +47,13 @@ runs:
       with:
         name: sca-results-${{ github.sha }}
         path: results.sarif
+    
+    - name: Upload SARIF to GitHub Security
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+      continue-on-error: true
 
     - name: Comment vulnerabilities on PR
       if: steps.check_vulns.outputs.found == 'true' && github.event_name == 'pull_request'
