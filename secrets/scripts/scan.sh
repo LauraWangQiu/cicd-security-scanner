@@ -112,21 +112,3 @@ if [ -f "$LEAKS_FILE" ]; then
         jq -r '.runs[0].results[] | "  - \(.ruleId): \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine)"' "$LEAKS_FILE" 2>/dev/null || true
     fi
 fi
-
-# Add an 'artifacts' list to the SARIF so GitHub can show "Scanned files" in the UI.
-# This collects the unique artifact URIs referenced by results and writes them
-# into runs[0].artifacts as objects with a `location.uri` field.
-if [ -f "$LEAKS_FILE" ]; then
-        jq '
-            if .runs and .runs[0] then
-                .runs[0].artifacts = (
-                    [ .runs[0].results[]?.locations[0]?.physicalLocation?.artifactLocation?.uri ]
-                    | map(select(. != null))
-                    | unique
-                    | map({ location: { uri: . } })
-                )
-            else
-                .
-            end
-        ' "$LEAKS_FILE" > "$LEAKS_FILE.tmp" && mv "$LEAKS_FILE.tmp" "$LEAKS_FILE" || true
-fi
