@@ -154,7 +154,7 @@ jobs:
     steps:
       - uses: LauraWangQiu/cicd-security-scanner/sast@main
         with:
-          tool: ${{ inputs.sast_tool || 'semgrep' }}
+          tool: ${{ inputs.sast_tool }}
           config: 'auto'
           scan_mode: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           base_ref: ${{ github.base_ref }}
@@ -174,7 +174,7 @@ jobs:
     steps:
       - uses: LauraWangQiu/cicd-security-scanner/sca@main
         with:
-          tool: ${{ inputs.sca_tool || 'trivy' }}
+          tool: ${{ inputs.sca_tool }}
           severity: 'HIGH,CRITICAL'
           scan_mode: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           base_ref: ${{ github.base_ref }}
@@ -194,7 +194,7 @@ jobs:
     steps:
       - uses: LauraWangQiu/cicd-security-scanner/iac@main
         with:
-          tool: ${{ inputs.iac_tool || 'checkov' }}
+          tool: ${{ inputs.iac_tool }}
           framework: 'all'
           scan_mode: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           base_ref: ${{ github.base_ref }}
@@ -214,7 +214,7 @@ jobs:
     steps:
       - uses: LauraWangQiu/cicd-security-scanner/containers@main
         with:
-          tool: ${{ inputs.containers_tool || 'trivy' }}
+          tool: ${{ inputs.containers_tool }}
           severity: 'HIGH,CRITICAL'
           scan_mode: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           base_ref: ${{ github.base_ref }}
