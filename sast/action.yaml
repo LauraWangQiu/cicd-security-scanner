@@ -68,5 +68,5 @@ runs:
       if: inputs.fail_on_findings == 'true' && steps.check_findings.outputs.found == 'true'
       shell: bash
       run: |
-        echo "❌ SAST found ${{ steps.check_findings.outputs.count }} security issues"
+        echo "::error::Found ${{ steps.check_findings.outputs.count }} security issue(s) in source code"
         exit 1

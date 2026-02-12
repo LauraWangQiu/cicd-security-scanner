@@ -68,5 +68,5 @@ runs:
       if: inputs.fail_on_findings == 'true' && steps.check_findings.outputs.found == 'true'
       shell: bash
       run: |
-        echo "❌ IaC scan found ${{ steps.check_findings.outputs.count }} misconfigurations"
+        echo "::error::Found ${{ steps.check_findings.outputs.count }} misconfiguration(s) in infrastructure code"
         exit 1

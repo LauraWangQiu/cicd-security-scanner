@@ -74,5 +74,5 @@ runs:
       if: inputs.fail_on_vulnerabilities == 'true' && steps.check_vulns.outputs.found == 'true'
       shell: bash
       run: |
-        echo "❌ Container scan found ${{ steps.check_vulns.outputs.count }} vulnerabilities"
+        echo "::error::Found ${{ steps.check_vulns.outputs.count }} vulnerability(ies) in container/Dockerfile"
         exit 1
