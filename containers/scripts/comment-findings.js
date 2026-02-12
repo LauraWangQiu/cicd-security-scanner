@@ -73,13 +73,8 @@ module.exports = async ({ github, context }) => {
       if (score >= 4.0) return '🟡 MEDIUM';
       return '🟢 LOW';
     }
-    const msg = result.message?.text || '';
-    const severityMatch = msg.match(/Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW)/i);
-    if (severityMatch) {
-      const sev = severityMatch[1].toUpperCase();
-      const icons = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🟢' };
-      return `${icons[sev] || ''} ${sev}`;
-    }
+    if (rule?.defaultConfiguration?.level === 'error') return '🔴 HIGH';
+    if (rule?.defaultConfiguration?.level === 'warning') return '🟡 MEDIUM';
     return '🟢 LOW';
   };
 
@@ -91,19 +86,19 @@ module.exports = async ({ github, context }) => {
     const line = loc.region?.startLine || 1;
     if (!path) continue;
 
-    const ruleId = r.ruleId || "Vulnerability";
-    const message = r.message?.text || "Dependency vulnerability found";
+    const ruleId = r.ruleId || "Container issue";
+    const message = r.message?.text || "Container/Dockerfile issue found";
     const severity = getSeverity(r);
     const rule = ruleIndex[ruleId];
     const helpUri = rule?.helpUri || '';
 
-    const body = `🔓 **Dependency Vulnerability** ${severity}
+    const body = `🐳 **Container/Dockerfile Issue** ${severity}
 
-**CVE:** \`${ruleId}\`  
+**Rule:** \`${ruleId}\`  
 **Details:** ${message}
-${helpUri ? `\n📚 [Vulnerability details](${helpUri})` : ''}
+${helpUri ? `\n📚 [Remediation guide](${helpUri})` : ''}
 
-🔧 Update the affected dependency to a patched version.`;
+🔧 Fix this container security issue before building/deploying.`;
 
     try {
       if (newFiles.has(path)) {

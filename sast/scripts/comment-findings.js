@@ -64,22 +64,10 @@ module.exports = async ({ github, context }) => {
   }
 
   // Get severity from rule
-  const getSeverity = (result) => {
-    const rule = ruleIndex[result.ruleId];
-    if (rule?.properties?.['security-severity']) {
-      const score = parseFloat(rule.properties['security-severity']);
-      if (score >= 9.0) return '🔴 CRITICAL';
-      if (score >= 7.0) return '🟠 HIGH';
-      if (score >= 4.0) return '🟡 MEDIUM';
-      return '🟢 LOW';
-    }
-    const msg = result.message?.text || '';
-    const severityMatch = msg.match(/Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW)/i);
-    if (severityMatch) {
-      const sev = severityMatch[1].toUpperCase();
-      const icons = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🟢' };
-      return `${icons[sev] || ''} ${sev}`;
-    }
+  const getSeverity = (ruleId) => {
+    const rule = ruleIndex[ruleId];
+    if (rule?.defaultConfiguration?.level === 'error') return '🔴 HIGH';
+    if (rule?.defaultConfiguration?.level === 'warning') return '🟡 MEDIUM';
     return '🟢 LOW';
   };
 
@@ -88,22 +76,22 @@ module.exports = async ({ github, context }) => {
     if (!loc) continue;
 
     const path = loc.artifactLocation?.uri;
-    const line = loc.region?.startLine || 1;
-    if (!path) continue;
+    const line = loc.region?.startLine;
+    if (!path || !line) continue;
 
-    const ruleId = r.ruleId || "Vulnerability";
-    const message = r.message?.text || "Dependency vulnerability found";
-    const severity = getSeverity(r);
+    const ruleId = r.ruleId || "Security finding";
+    const message = r.message?.text || "Potential security issue found";
+    const severity = getSeverity(ruleId);
     const rule = ruleIndex[ruleId];
     const helpUri = rule?.helpUri || '';
 
-    const body = `🔓 **Dependency Vulnerability** ${severity}
+    const body = `🔍 **SAST Finding** ${severity}
 
-**CVE:** \`${ruleId}\`  
+**Rule:** \`${ruleId}\`  
 **Details:** ${message}
-${helpUri ? `\n📚 [Vulnerability details](${helpUri})` : ''}
+${helpUri ? `\n📚 [More info](${helpUri})` : ''}
 
-🔧 Update the affected dependency to a patched version.`;
+⚠️ Review and fix this security issue.`;
 
     try {
       if (newFiles.has(path)) {

@@ -63,23 +63,16 @@ module.exports = async ({ github, context }) => {
     }
   }
 
-  // Get severity from rule
+  // Get severity from rule or message
   const getSeverity = (result) => {
     const rule = ruleIndex[result.ruleId];
-    if (rule?.properties?.['security-severity']) {
-      const score = parseFloat(rule.properties['security-severity']);
-      if (score >= 9.0) return '🔴 CRITICAL';
-      if (score >= 7.0) return '🟠 HIGH';
-      if (score >= 4.0) return '🟡 MEDIUM';
-      return '🟢 LOW';
-    }
+    // Checkov uses level in defaultConfiguration
+    if (rule?.defaultConfiguration?.level === 'error') return '🔴 HIGH';
+    if (rule?.defaultConfiguration?.level === 'warning') return '🟡 MEDIUM';
+    // Try to extract from message
     const msg = result.message?.text || '';
-    const severityMatch = msg.match(/Severity:\s*(CRITICAL|HIGH|MEDIUM|LOW)/i);
-    if (severityMatch) {
-      const sev = severityMatch[1].toUpperCase();
-      const icons = { CRITICAL: '🔴', HIGH: '🟠', MEDIUM: '🟡', LOW: '🟢' };
-      return `${icons[sev] || ''} ${sev}`;
-    }
+    if (msg.includes('CRITICAL') || msg.includes('HIGH')) return '🔴 HIGH';
+    if (msg.includes('MEDIUM')) return '🟡 MEDIUM';
     return '🟢 LOW';
   };
 
@@ -91,19 +84,23 @@ module.exports = async ({ github, context }) => {
     const line = loc.region?.startLine || 1;
     if (!path) continue;
 
-    const ruleId = r.ruleId || "Vulnerability";
-    const message = r.message?.text || "Dependency vulnerability found";
+    const ruleId = r.ruleId || "IaC misconfiguration";
+    const message = r.message?.text || "Infrastructure misconfiguration found";
     const severity = getSeverity(r);
     const rule = ruleIndex[ruleId];
     const helpUri = rule?.helpUri || '';
 
-    const body = `🔓 **Dependency Vulnerability** ${severity}
+    // Extract check name if available
+    const checkName = rule?.shortDescription?.text || ruleId;
 
-**CVE:** \`${ruleId}\`  
+    const body = `🏗️ **IaC Misconfiguration** ${severity}
+
+**Check:** \`${checkName}\`  
+**Rule:** \`${ruleId}\`  
 **Details:** ${message}
-${helpUri ? `\n📚 [Vulnerability details](${helpUri})` : ''}
+${helpUri ? `\n📚 [Remediation guide](${helpUri})` : ''}
 
-🔧 Update the affected dependency to a patched version.`;
+🔧 Fix this infrastructure misconfiguration before deploying.`;
 
     try {
       if (newFiles.has(path)) {
