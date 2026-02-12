@@ -5,19 +5,6 @@ module.exports = async ({ github, context }) => {
   const results = sarif.runs?.[0]?.results || [];
   const rules = sarif.runs?.[0]?.tool?.driver?.rules || [];
 
-  // If Code Scanning Alerts are active for this tool, skip PR inline comments.
-  const toolName = (sarif.runs?.[0]?.tool?.driver?.name || 'Checkov').toString();
-  try {
-    const alertsResp = await github.rest.codeScanning.listAlertsForRepo({ owner: context.repo.owner, repo: context.repo.repo, tool_name: toolName });
-    const alerts = alertsResp.data || [];
-    if (alerts.length > 0) {
-      console.log(`Code scanning alerts present for tool '${toolName}' — skipping inline PR comments.`);
-      return;
-    }
-  } catch (err) {
-    console.log(`Could not check Code Scanning Alerts (will proceed to post comments): ${err.message}`);
-  }
-
   if (results.length === 0) return;
 
   const { owner, repo } = context.repo;
