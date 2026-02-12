@@ -12,23 +12,25 @@ Suite modular de herramientas de seguridad empaquetadas como GitHub Actions, dis
 
 ```
 cicd-security-scanner/
-├── secrets/     # 🔐 Detección de secretos (GitLeaks)
-├── sca/         # 📦 Análisis de dependencias (Trivy)
-├── sast/        # 🔍 Análisis estático de código (Semgrep)
-├── iac/         # 🏗️ Seguridad en IaC (Checkov)
-├── containers/  # 🐳 Escaneo de imágenes Docker (Trivy)
+├── secrets/     # 🔐 Detección de secretos (GitLeaks, TruffleHog)
+├── sca/         # 📦 Análisis de dependencias (Trivy, Grype)
+├── sast/        # 🔍 Análisis estático de código (Semgrep, Bandit)
+├── iac/         # 🏗️ Seguridad en IaC (Checkov, Trivy)
+├── containers/  # 🐳 Escaneo de imágenes Docker (Trivy, Grype)
 └── examples/    # 📝 Workflows de ejemplo
 ```
 
 ## 🛡️ Módulos
 
-| Módulo | Herramienta | Descripción |
-|--------|-------------|-------------|
-| `secrets/` | [GitLeaks](https://github.com/gitleaks/gitleaks) | Detecta credenciales, API keys, tokens en código y commits |
-| `sca/` | [Trivy](https://github.com/aquasecurity/trivy) | Analiza vulnerabilidades en dependencias (CVEs) |
-| `sast/` | [Semgrep](https://semgrep.dev/) | Análisis estático: SQL injection, XSS, etc. |
-| `iac/` | [Checkov](https://www.checkov.io/) | Misconfigurations en Terraform, K8s, Dockerfile |
-| `containers/` | [Trivy](https://github.com/aquasecurity/trivy) | Vulnerabilidades en imágenes Docker y Dockerfiles |
+Cada módulo soporta múltiples herramientas intercambiables mediante el parámetro `tool`.
+
+| Módulo | Herramientas | Default | Descripción |
+|--------|-------------|---------|-------------|
+| `secrets/` | [GitLeaks](https://github.com/gitleaks/gitleaks), [TruffleHog](https://github.com/trufflesecurity/trufflehog) | `gitleaks` | Detecta credenciales, API keys, tokens |
+| `sca/` | [Trivy](https://github.com/aquasecurity/trivy), [Grype](https://github.com/anchore/grype) | `trivy` | Analiza vulnerabilidades en dependencias (CVEs) |
+| `sast/` | [Semgrep](https://semgrep.dev/), [Bandit](https://github.com/PyCQA/bandit) | `semgrep` | Análisis estático: SQL injection, XSS, etc. |
+| `iac/` | [Checkov](https://www.checkov.io/), [Trivy](https://github.com/aquasecurity/trivy) | `checkov` | Misconfigurations en Terraform, K8s, Dockerfile |
+| `containers/` | [Trivy](https://github.com/aquasecurity/trivy), [Grype](https://github.com/anchore/grype) | `trivy` | Vulnerabilidades en imágenes Docker y Dockerfiles |
 
 ## 🚀 Uso Rápido
 
@@ -124,31 +126,92 @@ jobs:
 ```yaml
 - uses: LauraWangQiu/cicd-security-scanner/sast@main
   with:
+    tool: 'bandit'            # o 'semgrep' (default)
     config: 'p/security-audit'
     fail_on_findings: 'true'
 ```
 
-### Opción 3: Ejecución local con Docker
+### Selección de herramienta
+
+Cada módulo acepta un parámetro `tool` para elegir la herramienta de escaneo:
+
+```yaml
+# Secretos con TruffleHog en vez de GitLeaks
+- uses: LauraWangQiu/cicd-security-scanner/secrets@main
+  with:
+    tool: 'trufflehog'
+
+# SCA con Grype en vez de Trivy
+- uses: LauraWangQiu/cicd-security-scanner/sca@main
+  with:
+    tool: 'grype'
+
+# IaC con Trivy en vez de Checkov
+- uses: LauraWangQiu/cicd-security-scanner/iac@main
+  with:
+    tool: 'trivy'
+```
+
+### Opción 4: Ejecución local con Docker
 
 ```bash
-# Secrets
+# Secrets (default: gitleaks)
 docker build -t scanner-secrets ./secrets
 docker run --rm -v $(pwd):/scan scanner-secrets
 
-# SCA
+# Secrets con TruffleHog
+docker run --rm -v $(pwd):/scan -e TOOL=trufflehog scanner-secrets
+
+# SCA (default: trivy)
 docker build -t scanner-sca ./sca
 docker run --rm -v $(pwd):/scan scanner-sca
 
-# SAST
+# SCA con Grype
+docker run --rm -v $(pwd):/scan -e TOOL=grype scanner-sca
+
+# SAST (default: semgrep)
 docker build -t scanner-sast ./sast
 docker run --rm -v $(pwd):/scan scanner-sast
 
-# IaC
+# SAST con Bandit
+docker run --rm -v $(pwd):/scan -e TOOL=bandit scanner-sast
+
+# IaC (default: checkov)
 docker build -t scanner-iac ./iac
 docker run --rm -v $(pwd):/scan scanner-iac
+
+# IaC con Trivy
+docker run --rm -v $(pwd):/scan -e TOOL=trivy scanner-iac
 ```
 
-## 📊 Salidas
+## � Añadir una nueva herramienta
+
+La plataforma está diseñada para ser extensible. Para añadir una nueva herramienta a cualquier módulo:
+
+1. **Crear el script de escaneo**: `scripts/scan-<nombre>.sh`
+   - Debe leer las variables `SCAN_MODE`, `BASE_REF`, etc.
+   - Debe generar resultados en formato **SARIF** en `/scan/results.sarif`
+
+2. **Registrarlo en el dispatcher**: Añadir un `case` en `scripts/scan.sh`
+   ```bash
+   case "$TOOL" in
+       nueva-herramienta)
+           source "$SCRIPT_DIR/scan-nueva-herramienta.sh"
+           ;;
+   esac
+   ```
+
+3. **Instalar en el Dockerfile**: Añadir la instalación de la herramienta
+   ```dockerfile
+   RUN curl -sSfL https://... | tar -xz -C /usr/local/bin
+   COPY scripts/scan-nueva-herramienta.sh /scripts/scan-nueva-herramienta.sh
+   ```
+
+4. **Actualizar el `action.yaml`**: Documentar la nueva opción en el input `tool`
+
+> Todas las herramientas deben generar SARIF para que los comentarios en PR, subida de artefactos y security gate funcionen sin cambios.
+
+## �📊 Salidas
 
 Todos los módulos generan un `results.sarif`
 

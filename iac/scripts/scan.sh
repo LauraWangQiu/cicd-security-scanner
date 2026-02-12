@@ -1,70 +1,56 @@
 #!/bin/bash
 set -e
 
+# ──────────────────────────────────────────────────────────────
+#  IaC Scanner Dispatcher
+#  Selects the scanning tool based on the TOOL environment variable.
+#  Supported tools: checkov (default), trivy
+#  To add a new tool, create scripts/scan-<toolname>.sh and add
+#  it to the case below and the Dockerfile.
+# ──────────────────────────────────────────────────────────────
+
+TOOL="${TOOL:-checkov}"
 SCAN_PATH="${SCAN_PATH:-/scan}"
 FRAMEWORK="${FRAMEWORK:-all}"
 SEVERITY="${SEVERITY:-HIGH,CRITICAL}"
 SCAN_MODE="${SCAN_MODE:-full}"
 BASE_REF="${GITHUB_BASE_REF:-main}"
 
-echo "🔍 Running Checkov IaC scan..."
+echo "🏗️ IaC Scanner"
+echo "   Tool: $TOOL"
 echo "   Mode: $SCAN_MODE"
 
 git config --global --add safe.directory "$SCAN_PATH"
 cd "$SCAN_PATH"
 
-# IaC file patterns
-IAC_PATTERNS="*.tf *.tfvars *.yml *.yaml Dockerfile docker-compose* *.json"
+export SCAN_MODE BASE_REF SCAN_PATH FRAMEWORK SEVERITY
 
-if [ "$SCAN_MODE" = "pr" ]; then
-    echo "[*] PR mode: scanning only changed IaC files..."
-    git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
-    CHANGED_FILES=$(git diff --name-only --diff-filter=AMRC "origin/$BASE_REF"...HEAD -- $IAC_PATTERNS 2>/dev/null || true)
+SCRIPT_DIR="/scripts"
 
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "[*] No IaC files changed — generating empty SARIF"
-        echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Checkov","rules":[]}},"results":[]}]}' > /scan/results.sarif
-    else
-        echo "[*] Changed IaC files:"
-        echo "$CHANGED_FILES"
-        # Build --file args for checkov
-        FILE_ARGS=""
-        for f in $CHANGED_FILES; do
-            [ -f "$f" ] && FILE_ARGS="$FILE_ARGS --file $f"
-        done
-
-        if [ -z "$FILE_ARGS" ]; then
-            echo "[*] No scannable IaC files in diff — generating empty SARIF"
-            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Checkov","rules":[]}},"results":[]}]}' > /scan/results.sarif
-        else
-            echo "[*] Scanning $(echo $CHANGED_FILES | wc -w) changed IaC file(s)..."
-            checkov \
-                $FILE_ARGS \
-                --framework "$FRAMEWORK" \
-                --output sarif \
-                --output-file-path /scan \
-                --soft-fail || true
-        fi
-    fi
-else
-    # Full scan mode
-    checkov \
-        -d "$SCAN_PATH" \
-        --framework "$FRAMEWORK" \
-        --output sarif \
-        --output-file-path /scan \
-        --soft-fail || true
-fi
-
-# Rename output file
-if [ -f /scan/results_sarif.sarif ]; then
-    mv /scan/results_sarif.sarif /scan/results.sarif
-fi
+# Dispatch to tool-specific script
+case "$TOOL" in
+    checkov)
+        source "$SCRIPT_DIR/scan-checkov.sh"
+        ;;
+    trivy)
+        source "$SCRIPT_DIR/scan-trivy.sh"
+        ;;
+    *)
+        echo "[!] Unknown TOOL: $TOOL"
+        echo "    Supported tools: checkov, trivy"
+        echo ""
+        echo "    To add a new tool:"
+        echo "      1. Create scripts/scan-<toolname>.sh"
+        echo "      2. Add it to the case in scan.sh"
+        echo "      3. Install it in the Dockerfile"
+        exit 1
+        ;;
+esac
 
 # Format output, fix /scan/ paths
 if [ -f /scan/results.sarif ]; then
     jq --indent 2 '
-      walk(if type == "string" then gsub("^/scan/"; "") else . end)
+      walk(if type == "string" then gsub("^/scan/"; "") | gsub("^/tmp/iac_scan_[0-9]+/"; "") else . end)
     ' /scan/results.sarif > /scan/results.sarif.tmp && mv /scan/results.sarif.tmp /scan/results.sarif
 
     TOTAL=$(jq '.runs[0].results | length' /scan/results.sarif 2>/dev/null || echo "0")

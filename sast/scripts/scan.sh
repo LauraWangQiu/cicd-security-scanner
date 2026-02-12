@@ -1,53 +1,50 @@
 #!/bin/bash
 set -e
 
+# ──────────────────────────────────────────────────────────────
+#  SAST Scanner Dispatcher
+#  Selects the scanning tool based on the TOOL environment variable.
+#  Supported tools: semgrep (default), bandit
+#  To add a new tool, create scripts/scan-<toolname>.sh and add
+#  it to the case below and the Dockerfile.
+# ──────────────────────────────────────────────────────────────
+
+TOOL="${TOOL:-semgrep}"
 SCAN_PATH="${SCAN_PATH:-/scan}"
 SEVERITY="${SEVERITY:-ERROR,WARNING}"
-CONFIG="${SEMGREP_CONFIG:-auto}"
 SCAN_MODE="${SCAN_MODE:-full}"
 BASE_REF="${GITHUB_BASE_REF:-main}"
 
-echo "🔍 Running Semgrep SAST scan..."
+echo "🔍 SAST Scanner"
+echo "   Tool: $TOOL"
+echo "   Mode: $SCAN_MODE"
+
 git config --global --add safe.directory "$SCAN_PATH"
 cd "$SCAN_PATH"
 
-if [ "$SCAN_MODE" = "pr" ]; then
-    echo "[*] PR mode: scanning only changed files..."
-    git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
-    CHANGED_FILES=$(git diff --name-only --diff-filter=AMRC "origin/$BASE_REF"...HEAD 2>/dev/null || true)
+export SCAN_MODE BASE_REF SCAN_PATH SEVERITY
 
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "[*] No changed files detected — generating empty SARIF"
-        echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Semgrep","rules":[]}},"results":[]}]}' > /scan/results.sarif
-    else
-        # Filter to files that exist on disk
-        FILE_ARGS=""
-        for f in $CHANGED_FILES; do
-            [ -f "$f" ] && FILE_ARGS="$FILE_ARGS $f"
-        done
+SCRIPT_DIR="/scripts"
 
-        if [ -z "$FILE_ARGS" ]; then
-            echo "[*] No scannable files in diff — generating empty SARIF"
-            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Semgrep","rules":[]}},"results":[]}]}' > /scan/results.sarif
-        else
-            echo "[*] Scanning $(echo $FILE_ARGS | wc -w) changed file(s)..."
-            semgrep \
-                --config "$CONFIG" \
-                --sarif \
-                --no-git-ignore \
-                --output /scan/results.sarif \
-                $FILE_ARGS || true
-        fi
-    fi
-else
-    # Full scan mode
-    semgrep \
-        --config "$CONFIG" \
-        --sarif \
-        --no-git-ignore \
-        --output /scan/results.sarif \
-        "$SCAN_PATH" || true
-fi
+# Dispatch to tool-specific script
+case "$TOOL" in
+    semgrep)
+        source "$SCRIPT_DIR/scan-semgrep.sh"
+        ;;
+    bandit)
+        source "$SCRIPT_DIR/scan-bandit.sh"
+        ;;
+    *)
+        echo "[!] Unknown TOOL: $TOOL"
+        echo "    Supported tools: semgrep, bandit"
+        echo ""
+        echo "    To add a new tool:"
+        echo "      1. Create scripts/scan-<toolname>.sh"
+        echo "      2. Add it to the case in scan.sh"
+        echo "      3. Install it in the Dockerfile"
+        exit 1
+        ;;
+esac
 
 # Post-process SARIF: fix paths, remove duplicates with other scanners
 if [ -f /scan/results.sarif ]; then
@@ -63,7 +60,6 @@ if [ -f /scan/results.sarif ]; then
       walk(if type == "string" then gsub("^/scan/"; "") else . end)
     ' /scan/results.sarif > /scan/results.sarif.tmp && mv /scan/results.sarif.tmp /scan/results.sarif
     
-    # Count findings from SARIF
     TOTAL=$(jq '.runs[0].results | length' /scan/results.sarif 2>/dev/null || echo "0")
     
     echo ""

@@ -1,70 +1,54 @@
 #!/bin/bash
 set -e
 
+# ──────────────────────────────────────────────────────────────
+#  SCA Scanner Dispatcher
+#  Selects the scanning tool based on the TOOL environment variable.
+#  Supported tools: trivy (default), grype
+#  To add a new tool, create scripts/scan-<toolname>.sh and add
+#  it to the case below and the Dockerfile.
+# ──────────────────────────────────────────────────────────────
+
+TOOL="${TOOL:-trivy}"
 SCAN_PATH="${SCAN_PATH:-/scan}"
 SEVERITY="${SEVERITY:-HIGH,CRITICAL}"
 OUTPUT_FILE="${OUTPUT_FILE:-results.sarif}"
 SCAN_MODE="${SCAN_MODE:-full}"
 BASE_REF="${GITHUB_BASE_REF:-main}"
 
-echo "🔍 Starting SCA scan with Trivy..."
+echo "📦 SCA Scanner"
+echo "   Tool: $TOOL"
 echo "   Path: $SCAN_PATH"
 echo "   Severity: $SEVERITY"
+
 git config --global --add safe.directory "$SCAN_PATH"
 cd "$SCAN_PATH"
 
-# Dependency file patterns
-DEP_PATTERNS="requirements*.txt Pipfile* poetry.lock pyproject.toml package.json package-lock.json yarn.lock pnpm-lock.yaml go.sum go.mod Gemfile.lock Cargo.lock composer.lock *.csproj *.sln"
+export SCAN_MODE BASE_REF SCAN_PATH SEVERITY OUTPUT_FILE
 
-if [ "$SCAN_MODE" = "pr" ]; then
-    echo "[*] PR mode: scanning only changed dependency files..."
-    git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
-    CHANGED_FILES=$(git diff --name-only --diff-filter=AMRC "origin/$BASE_REF"...HEAD -- $DEP_PATTERNS 2>/dev/null || true)
+SCRIPT_DIR="/scripts"
 
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "[*] No dependency files changed — generating empty SARIF"
-        echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Trivy","rules":[]}},"results":[]}]}' > "/scan/$OUTPUT_FILE"
-    else
-        echo "[*] Changed dependency files:"
-        echo "$CHANGED_FILES"
-        
-        # Copy changed files to temp dir preserving structure, then run trivy ONCE
-        TMP_DIR="/tmp/sca_scan_$$"
-        mkdir -p "$TMP_DIR"
-        
-        FILE_COUNT=0
-        for f in $CHANGED_FILES; do
-            [ ! -f "$f" ] && continue
-            mkdir -p "$TMP_DIR/$(dirname "$f")"
-            cp "$f" "$TMP_DIR/$f"
-            FILE_COUNT=$((FILE_COUNT + 1))
-        done
+# Dispatch to tool-specific script
+case "$TOOL" in
+    trivy)
+        source "$SCRIPT_DIR/scan-trivy.sh"
+        ;;
+    grype)
+        source "$SCRIPT_DIR/scan-grype.sh"
+        ;;
+    *)
+        echo "[!] Unknown TOOL: $TOOL"
+        echo "    Supported tools: trivy, grype"
+        echo ""
+        echo "    To add a new tool:"
+        echo "      1. Create scripts/scan-<toolname>.sh"
+        echo "      2. Add it to the case in scan.sh"
+        echo "      3. Install it in the Dockerfile"
+        exit 1
+        ;;
+esac
 
-        if [ "$FILE_COUNT" -eq 0 ]; then
-            echo "[*] No scannable dependency files in diff — generating empty SARIF"
-            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Trivy","rules":[]}},"results":[]}]}' > "/scan/$OUTPUT_FILE"
-        else
-            echo "[*] Scanning $FILE_COUNT dependency file(s) in single trivy run..."
-            trivy filesystem "$TMP_DIR" \
-                --scanners vuln \
-                --severity "$SEVERITY" \
-                --format sarif \
-                --output "/scan/$OUTPUT_FILE" \
-                --exit-code 0 || true
-        fi
-        rm -rf "$TMP_DIR"
-    fi
-else
-    # Full scan mode
-    trivy filesystem "$SCAN_PATH" \
-        --scanners vuln \
-        --severity "$SEVERITY" \
-        --format sarif \
-        --output "/scan/$OUTPUT_FILE" \
-        --exit-code 0
-fi
-
-# Format output, fix paths (remove /scan/ and temp dir prefixes)
+# Format output, fix paths
 if [ -f "/scan/$OUTPUT_FILE" ]; then
     jq --indent 2 '
       walk(if type == "string" then gsub("^/scan/"; "") | gsub("^/tmp/sca_scan_[0-9]+/"; "") else . end)

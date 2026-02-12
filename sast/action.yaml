@@ -1,5 +1,5 @@
 name: 'CICD SAST Scanner'
-description: 'Static Application Security Testing with Semgrep'
+description: 'Static Application Security Testing (supports Semgrep, Bandit, and custom tools)'
 author: 'LauraWangQiu'
 
 branding:
@@ -7,10 +7,18 @@ branding:
   color: 'purple'
 
 inputs:
+  tool:
+    description: 'Scanning tool to use: semgrep, bandit'
+    required: false
+    default: 'semgrep'
   config:
-    description: 'Semgrep config (auto, p/ci, p/security-audit, etc.)'
+    description: 'Semgrep config (auto, p/ci, p/security-audit, etc.) — only used with semgrep'
     required: false
     default: 'auto'
+  severity:
+    description: 'Minimum severity to report. Semgrep: ERROR,WARNING. Bandit: LOW, MEDIUM, HIGH'
+    required: false
+    default: 'MEDIUM'
   scan_mode:
     description: 'Scan mode: full (entire repo) or pr (only changed files in PR)'
     required: false
@@ -41,7 +49,9 @@ runs:
       run: |
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
+          -e TOOL=${{ inputs.tool }} \
           -e SEMGREP_CONFIG=${{ inputs.config }} \
+          -e SEVERITY=${{ inputs.severity }} \
           -e SCAN_MODE=${{ inputs.scan_mode }} \
           -e GITHUB_BASE_REF=${{ inputs.base_ref }} \
           cicd-sast-scanner

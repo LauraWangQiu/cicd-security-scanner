@@ -1,5 +1,5 @@
 name: 'CICD SCA Scanner'
-description: 'Dependency vulnerability scanning with Trivy for PR diffs'
+description: 'Dependency vulnerability scanning (supports Trivy, Grype, and custom tools)'
 author: 'LauraWangQiu'
 
 branding:
@@ -7,6 +7,10 @@ branding:
   color: 'orange'
 
 inputs:
+  tool:
+    description: 'Scanning tool to use: trivy, grype'
+    required: false
+    default: 'trivy'
   severity:
     description: 'Minimum severity to report (CRITICAL, HIGH, MEDIUM, LOW)'
     required: false
@@ -41,6 +45,7 @@ runs:
       run: |
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
+          -e TOOL=${{ inputs.tool }} \
           -e SEVERITY=${{ inputs.severity }} \
           -e SCAN_MODE=${{ inputs.scan_mode }} \
           -e GITHUB_BASE_REF=${{ inputs.base_ref }} \

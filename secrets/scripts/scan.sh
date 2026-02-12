@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# ──────────────────────────────────────────────────────────────
+#  Secret Scanner Dispatcher
+#  Selects the scanning tool based on the TOOL environment variable.
+#  Supported tools: gitleaks (default), trufflehog
+#  To add a new tool, create scripts/scan-<toolname>.sh and add
+#  it to the case below and the Dockerfile.
+# ──────────────────────────────────────────────────────────────
+
+TOOL="${TOOL:-gitleaks}"
 TARGET=/scan
 LEAKS_FILE="results.sarif"
 
@@ -22,79 +31,31 @@ if [ "$SCAN_MODE" = "auto" ]; then
     fi
 fi
 
+export SCAN_MODE
+export LEAKS_FILE
+
+echo "🔐 Secret Scanner"
+echo "   Tool: $TOOL"
 echo "   Mode: $SCAN_MODE"
 
-case "$SCAN_MODE" in
-    pr)
-        # CI mode: scan only changed files in PR
-        echo "[*] Scanning changed files in PR..."
-        BASE_REF=${GITHUB_BASE_REF:-main}
-        
-        DIFF_FILES="pr.diff"
-        TMP_DIR="secret_parts"
-        
-        git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > "$DIFF_FILES" || true
-        
-        mkdir -p "$TMP_DIR"
-        rm -f "$TMP_DIR"/*.sarif
-        
-        echo "[*] Running Gitleaks per changed file..."
-        
-        i=0
-        while IFS= read -r path; do
-            [ -z "$path" ] && continue
-            [ ! -f "$path" ] && continue
-            
-            part="$TMP_DIR/part_$i.sarif"
-            echo "  -> Scanning $path"
-            gitleaks dir "$path" \
-                --report-format sarif \
-                --report-path "$part" \
-                --redact || true
-            i=$((i+1))
-        done < "$DIFF_FILES"
-        
-        # Merge SARIF files if any exist
-        if ls "$TMP_DIR"/*.sarif 1>/dev/null 2>&1; then
-            echo "[*] Merging SARIF files..."
-            jq -s '
-            {
-              "version": "2.1.0",
-              "runs": [
-                {
-                  "tool": (.[0].runs[0].tool),
-                  "results": (map(.runs[0].results) | add // [])
-                }
-              ]
-            }
-            ' "$TMP_DIR"/*.sarif > "$LEAKS_FILE"
-        else
-            echo "[*] No files to scan"
-            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gitleaks"}},"results":[]}]}' > "$LEAKS_FILE"
-        fi
+SCRIPT_DIR="/scripts"
+
+# Dispatch to tool-specific script
+case "$TOOL" in
+    gitleaks)
+        source "$SCRIPT_DIR/scan-gitleaks.sh"
         ;;
-        
-    history)
-        # Scan entire git history (all commits)
-        echo "[*] Scanning entire git history..."
-        gitleaks detect --source="." \
-            --report-format sarif \
-            --report-path "$LEAKS_FILE" \
-            --redact || true
+    trufflehog)
+        source "$SCRIPT_DIR/scan-trufflehog.sh"
         ;;
-        
-    files)
-        # Scan current files on disk (includes uncommitted changes)
-        echo "[*] Scanning current files on disk..."
-        gitleaks dir . \
-            --report-format sarif \
-            --report-path "$LEAKS_FILE" \
-            --redact || true
-        ;;
-        
     *)
-        echo "[!] Unknown SCAN_MODE: $SCAN_MODE"
-        echo "    Valid options: pr, history, files"
+        echo "[!] Unknown TOOL: $TOOL"
+        echo "    Supported tools: gitleaks, trufflehog"
+        echo ""
+        echo "    To add a new tool:"
+        echo "      1. Create scripts/scan-<toolname>.sh"
+        echo "      2. Add it to the case in scan.sh"
+        echo "      3. Install it in the Dockerfile"
         exit 1
         ;;
 esac

@@ -1,5 +1,5 @@
 name: 'CICD IaC Scanner'
-description: 'Infrastructure as Code security scanning with Checkov'
+description: 'Infrastructure as Code security scanning (supports Checkov, Trivy, and custom tools)'
 author: 'LauraWangQiu'
 
 branding:
@@ -7,6 +7,10 @@ branding:
   color: 'blue'
 
 inputs:
+  tool:
+    description: 'Scanning tool to use: checkov, trivy'
+    required: false
+    default: 'checkov'
   framework:
     description: 'Frameworks to scan (all, terraform, kubernetes, dockerfile, etc.)'
     required: false
@@ -41,6 +45,7 @@ runs:
       run: |
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
+          -e TOOL=${{ inputs.tool }} \
           -e FRAMEWORK=${{ inputs.framework }} \
           -e SCAN_MODE=${{ inputs.scan_mode }} \
           -e GITHUB_BASE_REF=${{ inputs.base_ref }} \
