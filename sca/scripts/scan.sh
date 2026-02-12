@@ -75,3 +75,20 @@ if [ -f "/scan/$OUTPUT_FILE" ]; then
 else
     echo "⚠️ No results file generated."
 fi
+
+# Populate SARIF 'artifacts' so GitHub shows scanned files in the UI
+if [ -f "/scan/$OUTPUT_FILE" ]; then
+    jq '
+        if .runs and .runs[0] then
+            .runs[0].artifacts = (
+                [ .runs[0].results[]?.locations[]?.physicalLocation?.artifactLocation?.uri ]
+                | map(select(. != null))
+                | map( gsub("^/scan/"; "") | gsub("^/tmp/sca_scan_[0-9]+/"; "") )
+                | unique
+                | map({ location: { uri: . } })
+            )
+        else
+            .
+        end
+    ' "/scan/$OUTPUT_FILE" > "/scan/${OUTPUT_FILE}.tmp" && mv "/scan/${OUTPUT_FILE}.tmp" "/scan/$OUTPUT_FILE" || true
+fi

@@ -74,3 +74,20 @@ if [ -f /scan/results.sarif ]; then
 fi
 
 echo "✅ IaC scan complete. Results in /scan/results.sarif"
+
+# Populate SARIF 'artifacts' so GitHub shows scanned files in the UI
+if [ -f /scan/results.sarif ]; then
+    jq '
+        if .runs and .runs[0] then
+            .runs[0].artifacts = (
+                [ .runs[0].results[]?.locations[]?.physicalLocation?.artifactLocation?.uri ]
+                | map(select(. != null))
+                | map( gsub("^/scan/"; "") )
+                | unique
+                | map({ location: { uri: . } })
+            )
+        else
+            .
+        end
+    ' /scan/results.sarif > /scan/results.sarif.tmp && mv /scan/results.sarif.tmp /scan/results.sarif || true
+fi
