@@ -11,6 +11,14 @@ inputs:
     description: 'Minimum severity to report (CRITICAL, HIGH, MEDIUM, LOW)'
     required: false
     default: 'HIGH,CRITICAL'
+  scan_mode:
+    description: 'Scan mode: full (entire repo) or pr (only changed dependency files in PR)'
+    required: false
+    default: 'full'
+  base_ref:
+    description: 'Base branch for PR diff comparison (only used when scan_mode=pr)'
+    required: false
+    default: 'main'
   fail_on_vulnerabilities:
     description: 'Fail the workflow if vulnerabilities are found'
     required: false
@@ -32,6 +40,8 @@ runs:
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
           -e SEVERITY=${{ inputs.severity }} \
+          -e SCAN_MODE=${{ inputs.scan_mode }} \
+          -e GITHUB_BASE_REF=${{ inputs.base_ref }} \
           cicd-sca-scanner
 
     - name: Check for vulnerabilities in results

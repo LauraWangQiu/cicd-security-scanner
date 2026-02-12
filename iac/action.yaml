@@ -11,6 +11,14 @@ inputs:
     description: 'Frameworks to scan (all, terraform, kubernetes, dockerfile, etc.)'
     required: false
     default: 'all'
+  scan_mode:
+    description: 'Scan mode: full (entire repo) or pr (only changed IaC files in PR)'
+    required: false
+    default: 'full'
+  base_ref:
+    description: 'Base branch for PR diff comparison (only used when scan_mode=pr)'
+    required: false
+    default: 'main'
   fail_on_findings:
     description: 'Fail the workflow if misconfigurations are found'
     required: false
@@ -32,6 +40,8 @@ runs:
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
           -e FRAMEWORK=${{ inputs.framework }} \
+          -e SCAN_MODE=${{ inputs.scan_mode }} \
+          -e GITHUB_BASE_REF=${{ inputs.base_ref }} \
           cicd-iac-scanner
 
     - name: Check for findings in results

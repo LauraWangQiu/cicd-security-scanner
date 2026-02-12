@@ -22,7 +22,7 @@ if [ "$SCAN_MODE" = "auto" ]; then
     fi
 fi
 
-echo "[*] Scan mode: $SCAN_MODE"
+echo "   Mode: $SCAN_MODE"
 
 case "$SCAN_MODE" in
     pr)
@@ -31,7 +31,7 @@ case "$SCAN_MODE" in
         BASE_REF=${GITHUB_BASE_REF:-main}
         
         DIFF_FILES="pr.diff"
-        TMP_DIR="sarif_parts"
+        TMP_DIR="secret_parts"
         
         git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > "$DIFF_FILES" || true
         

@@ -11,6 +11,14 @@ inputs:
     description: 'Semgrep config (auto, p/ci, p/security-audit, etc.)'
     required: false
     default: 'auto'
+  scan_mode:
+    description: 'Scan mode: full (entire repo) or pr (only changed files in PR)'
+    required: false
+    default: 'full'
+  base_ref:
+    description: 'Base branch for PR diff comparison (only used when scan_mode=pr)'
+    required: false
+    default: 'main'
   fail_on_findings:
     description: 'Fail the workflow if findings are found'
     required: false
@@ -32,6 +40,8 @@ runs:
         docker run --rm \
           -v ${{ github.workspace }}:/scan \
           -e SEMGREP_CONFIG=${{ inputs.config }} \
+          -e SCAN_MODE=${{ inputs.scan_mode }} \
+          -e GITHUB_BASE_REF=${{ inputs.base_ref }} \
           cicd-sast-scanner
 
     - name: Check for findings in results
