@@ -4,6 +4,21 @@ module.exports = async ({ github, context }) => {
   const sarif = JSON.parse(fs.readFileSync('results.sarif', 'utf8'));
   const results = sarif.runs?.[0]?.results || [];
 
+  // If Code Scanning Alerts are active for this tool, skip PR inline comments.
+  // Determine tool name from SARIF (fall back to 'gitleaks') and query alerts.
+  const toolName = (sarif.runs?.[0]?.tool?.driver?.name || 'gitleaks').toString();
+  try {
+    const alertsResp = await github.rest.codeScanning.listAlertsForRepo({ owner: context.repo.owner, repo: context.repo.repo, tool_name: toolName });
+    const alerts = alertsResp.data || [];
+    if (alerts.length > 0) {
+      console.log(`Code scanning alerts present for tool '${toolName}' — skipping inline PR comments.`);
+      return;
+    }
+  } catch (err) {
+    // If we cannot determine alerts (permissions, API not available), log and continue to commenting.
+    console.log(`Could not check Code Scanning Alerts (will proceed to post comments): ${err.message}`);
+  }
+
   if (results.length === 0) return;
 
   const { owner, repo } = context.repo;
