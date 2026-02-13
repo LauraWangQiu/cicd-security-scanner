@@ -44,7 +44,6 @@ case "$SCAN_MODE" in
       else
         echo "[!] No TRUFFLEHOG_REMOTE_URL or GITHUB_TOKEN/GITHUB_REPOSITORY available; skipping history scan"
         echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"trufflehog"}},"results":[]} ]}' > "$LEAKS_FILE"
-        ;;
       fi
 
       echo "[*] Scanning remote repository: ${REMOTE_URL}"
