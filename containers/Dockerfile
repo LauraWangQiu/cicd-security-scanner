@@ -2,7 +2,7 @@ FROM aquasec/trivy:0.68.2
 
 ENV GRYPE_VERSION=0.87.0
 
-RUN apk add --no-cache bash jq sed curl
+RUN apk add --no-cache bash jq sed curl docker-cli git
 
 # Install Grype
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin v${GRYPE_VERSION}
