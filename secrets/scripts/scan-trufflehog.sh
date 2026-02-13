@@ -34,12 +34,25 @@ case "$SCAN_MODE" in
         ;;
 
     history)
-        echo "[*] Scanning entire git history..."
-        trufflehog git file://. \
-            --json \
-            --no-update \
-            2>/dev/null > "$TRUFFLEHOG_JSON" || true
+      echo "[*] Scanning entire git history..."
+      # Always scan a remote repository using a token-authenticated URL.
+      # Prefer explicit TRUFFLEHOG_REMOTE_URL, else use GITHUB_TOKEN + GITHUB_REPOSITORY.
+      if [ -n "${TRUFFLEHOG_REMOTE_URL:-}" ]; then
+        REMOTE_URL="${TRUFFLEHOG_REMOTE_URL}"
+      elif [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+        REMOTE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+      else
+        echo "[!] No TRUFFLEHOG_REMOTE_URL or GITHUB_TOKEN/GITHUB_REPOSITORY available; skipping history scan"
+        echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"trufflehog"}},"results":[]} ]}' > "$LEAKS_FILE"
         ;;
+      fi
+
+      echo "[*] Scanning remote repository: ${REMOTE_URL}"
+      trufflehog git "${REMOTE_URL}" \
+        --json \
+        --no-update \
+        2>/dev/null > "$TRUFFLEHOG_JSON" || true
+      ;;
 
     files)
         echo "[*] Scanning current files on disk..."
