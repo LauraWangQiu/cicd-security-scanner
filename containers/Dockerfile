@@ -8,6 +8,7 @@ RUN apk add --no-cache bash jq sed curl docker-cli git
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin v${GRYPE_VERSION}
 
 COPY scripts/scan.sh /scan.sh
+COPY scripts/helpers.sh /scripts/helpers.sh
 COPY scripts/scan-trivy.sh /scripts/scan-trivy.sh
 COPY scripts/scan-grype.sh /scripts/scan-grype.sh
 # Fix line endings (CRLF->LF) for cross-platform compatibility
