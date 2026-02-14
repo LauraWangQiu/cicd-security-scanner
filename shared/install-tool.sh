@@ -56,9 +56,10 @@ install_one() {
 
         # ── System packages ──────────────────────────────────
         docker-cli)
-            apt-get update -qq \
-                && apt-get install -y -qq --no-install-recommends docker.io \
-                && rm -rf /var/lib/apt/lists/*
+            local docker_ver="${version:-27.5.1}"
+            curl -sSfL "https://download.docker.com/linux/static/stable/x86_64/docker-${docker_ver}.tgz" \
+                | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
+            chmod +x /usr/local/bin/docker
             ;;
 
         *)
