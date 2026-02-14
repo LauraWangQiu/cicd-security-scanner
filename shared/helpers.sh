@@ -40,11 +40,17 @@ print_findings() {
 # Normalize /scan/ and /tmp/ paths in SARIF to relative paths.
 fix_sarif_paths() {
     [ ! -f "$1" ] && return
-    jq --indent 2 '
-      walk(if type == "string" then
-        gsub("^/scan/"; "") | gsub("^/tmp/[a-z_]+[0-9]*/"; "")
-      else . end)
-    ' "$1" > "${1}.tmp" && mv "${1}.tmp" "$1"
+        jq --indent 2 '
+            walk(if type == "string" then
+                # Remove repo scan root (/scan/) and temp directories
+                gsub("^/scan/"; "")
+                | gsub("^/tmp/[a-z_]+[0-9]*/"; "")
+                # Strip any non-file URI scheme prefix like "scanner-build:..." or "image:..."
+                | gsub("^[^:]+:"; "")
+                # Remove any leading file:// or leading slashes left behind
+                | gsub("^file://"; "") | gsub("^/+"; "")
+            else . end)
+        ' "$1" > "${1}.tmp" && mv "${1}.tmp" "$1"
 }
 
 # Merge multiple SARIF files into one.
