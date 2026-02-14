@@ -12,13 +12,44 @@ Suite modular de herramientas de seguridad empaquetadas como GitHub Actions, dis
 
 ```
 cicd-security-scanner/
-├── secrets/     # 🔐 Detección de secretos (GitLeaks, TruffleHog)
-├── sca/         # 📦 Análisis de dependencias (Trivy, Grype)
-├── sast/        # 🔍 Análisis estático de código (Semgrep, Bandit)
-├── iac/         # 🏗️ Seguridad en IaC (Checkov, Trivy)
-├── containers/  # 🐳 Escaneo de imágenes Docker (Trivy, Grype)
-└── examples/    # 📝 Workflows de ejemplo
+├── Dockerfile              # 🐳 Imagen universal (una sola para todos los módulos)
+├── Makefile                # 🔧 Build de las imágenes de cada módulo
+├── shared/                 # 📦 Código compartido
+│   ├── helpers.sh          #   Funciones comunes (SARIF, PR diff, merge, containers...)
+│   ├── check-results.sh    #   Verificador de resultados para action.yaml
+│   └── install-tool.sh     #   Instalador central de herramientas
+├── secrets/                # 🔐 Detección de secretos
+│   ├── action.yaml
+│   ├── tools.txt           #   gitleaks, trufflehog
+│   └── scripts/
+├── sast/                   # 🔍 Análisis estático de código
+│   ├── action.yaml
+│   ├── tools.txt           #   semgrep, bandit
+│   └── scripts/
+├── sca/                    # 📦 Análisis de dependencias
+│   ├── action.yaml
+│   ├── tools.txt           #   trivy, grype
+│   └── scripts/
+├── iac/                    # 🏗️ Seguridad en IaC
+│   ├── action.yaml
+│   ├── tools.txt           #   checkov, trivy
+│   └── scripts/
+├── containers/             # 🐳 Escaneo de imágenes Docker
+│   ├── action.yaml
+│   ├── tools.txt           #   trivy, grype, docker-cli
+│   └── scripts/
+└── examples/               # 📝 Workflows de ejemplo
 ```
+
+### Imagen universal
+
+Un único `Dockerfile` en la raíz sirve para todos los módulos. El argumento `MODULE` selecciona qué herramientas instalar y qué scripts copiar:
+
+```bash
+docker build --build-arg MODULE=secrets -t cicd-secret-scanner .
+```
+
+Las herramientas de cada módulo se definen en su `tools.txt` y se instalan automáticamente mediante `shared/install-tool.sh`.
 
 ## 🛡️ Módulos
 
@@ -155,33 +186,38 @@ Cada módulo acepta un parámetro `tool` para elegir la herramienta de escaneo:
 ### Opción 4: Ejecución local con Docker
 
 ```bash
+# Desde la raíz del repositorio cicd-security-scanner/
+
 # Secrets (default: gitleaks)
-docker build -t scanner-secrets ./secrets
-docker run --rm -v $(pwd):/scan scanner-secrets
+docker build --build-arg MODULE=secrets -t cicd-secret-scanner .
+docker run --rm -v $(pwd):/scan cicd-secret-scanner
 
 # Secrets con TruffleHog
-docker run --rm -v $(pwd):/scan -e TOOL=trufflehog scanner-secrets
+docker run --rm -v $(pwd):/scan -e TOOL=trufflehog cicd-secret-scanner
 
 # SCA (default: trivy)
-docker build -t scanner-sca ./sca
-docker run --rm -v $(pwd):/scan scanner-sca
-
-# SCA con Grype
-docker run --rm -v $(pwd):/scan -e TOOL=grype scanner-sca
+docker build --build-arg MODULE=sca -t cicd-sca-scanner .
+docker run --rm -v $(pwd):/scan cicd-sca-scanner
 
 # SAST (default: semgrep)
-docker build -t scanner-sast ./sast
-docker run --rm -v $(pwd):/scan scanner-sast
-
-# SAST con Bandit
-docker run --rm -v $(pwd):/scan -e TOOL=bandit scanner-sast
+docker build --build-arg MODULE=sast -t cicd-sast-scanner .
+docker run --rm -v $(pwd):/scan cicd-sast-scanner
 
 # IaC (default: checkov)
-docker build -t scanner-iac ./iac
-docker run --rm -v $(pwd):/scan scanner-iac
+docker build --build-arg MODULE=iac -t cicd-iac-scanner .
+docker run --rm -v $(pwd):/scan cicd-iac-scanner
 
-# IaC con Trivy
-docker run --rm -v $(pwd):/scan -e TOOL=trivy scanner-iac
+# Containers (default: trivy)
+docker build --build-arg MODULE=containers -t cicd-container-scanner .
+docker run --rm -v $(pwd):/scan -v /var/run/docker.sock:/var/run/docker.sock cicd-container-scanner
+```
+
+O usando el Makefile:
+
+```bash
+make secrets    # build secrets scanner
+make sast       # build sast scanner
+make all        # build all scanners
 ```
 
 ## � Añadir una nueva herramienta
@@ -213,15 +249,21 @@ La plataforma está diseñada para ser extensible. Para añadir una nueva herram
 
 ## �📊 Salidas
 
-Todos los módulos generan un `results.sarif`
+Todos los módulos generan un `results.sarif` en formato SARIF 2.1.0:
+
+- **GitHub Security tab**: subida automática via `codeql-action/upload-sarif`
+- **Artefactos**: `<módulo>-results-<sha>.sarif`
+- **Comentarios PR**: resumen de hallazgos inline
+- **Security gate**: falla el workflow si se encuentran hallazgos (configurable)
 
 ## ⚙️ Configuración
 
 Ver README de cada módulo para opciones específicas:
 - [secrets/README.md](secrets/README.md)
-- [sca/README.md](sca/README.md)
 - [sast/README.md](sast/README.md)
+- [sca/README.md](sca/README.md)
 - [iac/README.md](iac/README.md)
+- [containers/README.md](containers/README.md)
 
 ## 🧪 Validación
 
@@ -241,7 +283,7 @@ Probado contra repositorios vulnerables:
 
 ## 🔒 Seguridad de la Plataforma
 
-- Imágenes Docker mínimas (slim/alpine)
+- Imagen Docker universal mínima (`python:3.11-slim`)
 - Sin credenciales embebidas
 - Principio de mínimo privilegio
 - Escaneo de las propias imágenes con Trivy

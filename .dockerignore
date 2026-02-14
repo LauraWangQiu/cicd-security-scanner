@@ -1,0 +1,11 @@
+# Keep Docker build context lightweight
+.git
+.github
+images/
+examples/
+*.md
+LICENSE
+Makefile
+.dockerignore
+.gitignore
+.gitattributes

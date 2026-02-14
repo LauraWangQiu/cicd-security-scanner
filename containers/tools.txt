@@ -1,0 +1,4 @@
+# Container scanning tools
+docker-cli
+trivy 0.69.1
+grype 0.108.0

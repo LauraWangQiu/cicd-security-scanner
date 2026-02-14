@@ -9,35 +9,29 @@
 
 DOCKER=docker
 
-SECRETS_DIR=secrets
-SAST_DIR=sast
-SCA_DIR=sca
-IAC_DIR=iac
-CONTAINERS_DIR=containers
-
 .PHONY: all secrets sast sca iac containers help
 
 all: secrets sast sca iac containers
 
 secrets:
 	@echo "Building cicd-secret-scanner..."
-	$(DOCKER) build -t cicd-secret-scanner ./$(SECRETS_DIR)
+	$(DOCKER) build --build-arg MODULE=secrets -t cicd-secret-scanner .
 
 sast:
 	@echo "Building cicd-sast-scanner..."
-	$(DOCKER) build -t cicd-sast-scanner ./$(SAST_DIR)
+	$(DOCKER) build --build-arg MODULE=sast -t cicd-sast-scanner .
 
 sca:
 	@echo "Building cicd-sca-scanner..."
-	$(DOCKER) build -t cicd-sca-scanner ./$(SCA_DIR)
+	$(DOCKER) build --build-arg MODULE=sca -t cicd-sca-scanner .
 
 iac:
 	@echo "Building cicd-iac-scanner..."
-	$(DOCKER) build -t cicd-iac-scanner ./$(IAC_DIR)
+	$(DOCKER) build --build-arg MODULE=iac -t cicd-iac-scanner .
 
 containers:
 	@echo "Building cicd-container-scanner..."
-	$(DOCKER) build -t cicd-container-scanner ./$(CONTAINERS_DIR)
+	$(DOCKER) build --build-arg MODULE=containers -t cicd-container-scanner .
 
 help:
 	@echo "Makefile targets:"

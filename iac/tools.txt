@@ -1,0 +1,3 @@
+# IaC scanning tools
+checkov 3.2.501
+trivy 0.68.2

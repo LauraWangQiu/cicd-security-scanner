@@ -1,71 +1,40 @@
 #!/bin/bash
-# Gitleaks secret scanner
+# Gitleaks — secret scanner
 # Called by scan.sh dispatcher — do not run directly
 set -e
 
-TARGET=/scan
-LEAKS_FILE="results.sarif"
-
-cd "$TARGET"
-
-echo "[*] Tool: Gitleaks"
+TOOL_NAME="Gitleaks"
 
 case "$SCAN_MODE" in
     pr)
-        echo "[*] Scanning changed files in PR..."
-        BASE_REF=${GITHUB_BASE_REF:-main}
-        DIFF_FILES="pr.diff"
-        TMP_DIR="secret_parts"
-
-        git diff --name-only --diff-filter=AMRC origin/$BASE_REF...HEAD > "$DIFF_FILES" || true
-        mkdir -p "$TMP_DIR"
-        rm -f "$TMP_DIR"/*.sarif
-
-        i=0
-        while IFS= read -r path; do
-            [ -z "$path" ] && continue
-            [ ! -f "$path" ] && continue
-            part="$TMP_DIR/part_$i.sarif"
-            echo "  -> Scanning $path"
-            gitleaks dir "$path" \
-                --report-format sarif \
-                --report-path "$part" \
-                --redact || true
-            i=$((i+1))
-        done < "$DIFF_FILES"
-
-        if ls "$TMP_DIR"/*.sarif 1>/dev/null 2>&1; then
-            echo "[*] Merging SARIF files..."
-            jq -s '
-            {
-              "version": "2.1.0",
-              "runs": [
-                {
-                  "tool": (.[0].runs[0].tool),
-                  "results": (map(.runs[0].results) | add // [])
-                }
-              ]
-            }
-            ' "$TMP_DIR"/*.sarif > "$LEAKS_FILE"
+        echo "[*] PR mode: scanning changed files..."
+        if get_changed_files '*'; then
+            copy_to_tmpdir "gitleaks"
+            if [ "$SCAN_FILE_COUNT" -gt 0 ]; then
+                gitleaks dir "$TMP_SCAN_DIR" \
+                    --report-format sarif \
+                    --report-path "$RESULTS_FILE" \
+                    --redact || true
+                cleanup_tmpdir
+            else
+                write_empty_sarif "$TOOL_NAME" "$RESULTS_FILE"
+            fi
         else
-            echo "[*] No files to scan"
-            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"gitleaks"}},"results":[]}]}' > "$LEAKS_FILE"
+            write_empty_sarif "$TOOL_NAME" "$RESULTS_FILE"
         fi
         ;;
-
     history)
         echo "[*] Scanning entire git history..."
         gitleaks detect --source="." \
             --report-format sarif \
-            --report-path "$LEAKS_FILE" \
+            --report-path "$RESULTS_FILE" \
             --redact || true
         ;;
-
-    files)
-        echo "[*] Scanning current files on disk..."
+    files|*)
+        echo "[*] Scanning current files..."
         gitleaks dir . \
             --report-format sarif \
-            --report-path "$LEAKS_FILE" \
+            --report-path "$RESULTS_FILE" \
             --redact || true
         ;;
 esac

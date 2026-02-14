@@ -1,62 +1,44 @@
 #!/bin/bash
 set -e
-
 # ──────────────────────────────────────────────────────────────
-#  IaC Scanner Dispatcher
-#  Selects the scanning tool based on the TOOL environment variable.
-#  Supported tools: checkov (default), trivy
-#  To add a new tool, create scripts/scan-<toolname>.sh and add
-#  it to the case below and the Dockerfile.
+#  IaC Scanner — Dispatcher
+#  Tools: checkov (default), trivy
 # ──────────────────────────────────────────────────────────────
 
 TOOL="${TOOL:-checkov}"
 SCAN_PATH="${SCAN_PATH:-/scan}"
-FRAMEWORK="${FRAMEWORK:-all}"
-SEVERITY="${SEVERITY:-HIGH,CRITICAL}"
 SCAN_MODE="${SCAN_MODE:-full}"
 BASE_REF="${GITHUB_BASE_REF:-main}"
+FRAMEWORK="${FRAMEWORK:-all}"
+SEVERITY="${SEVERITY:-HIGH,CRITICAL}"
+RESULTS_FILE="/scan/results.sarif"
+SCRIPT_DIR="/scripts"
 
-echo "🏗️ IaC Scanner"
-echo "   Tool: $TOOL"
-echo "   Mode: $SCAN_MODE"
+source "$SCRIPT_DIR/helpers.sh"
 
 git config --global --add safe.directory "$SCAN_PATH"
 cd "$SCAN_PATH"
 
-export SCAN_MODE BASE_REF SCAN_PATH FRAMEWORK SEVERITY
+export SCAN_MODE BASE_REF SCAN_PATH FRAMEWORK SEVERITY RESULTS_FILE
 
-SCRIPT_DIR="/scripts"
+echo "🏗️ IaC Scanner"
+echo "   Tool: $TOOL | Mode: $SCAN_MODE"
 
-# Dispatch to tool-specific script
-case "$TOOL" in
-    checkov)
-        source "$SCRIPT_DIR/scan-checkov.sh"
-        ;;
-    trivy)
-        source "$SCRIPT_DIR/scan-trivy.sh"
-        ;;
-    *)
-        echo "[!] Unknown TOOL: $TOOL"
-        echo "    Supported tools: checkov, trivy"
-        echo ""
-        echo "    To add a new tool:"
-        echo "      1. Create scripts/scan-<toolname>.sh"
-        echo "      2. Add it to the case in scan.sh"
-        echo "      3. Install it in the Dockerfile"
-        exit 1
-        ;;
-esac
-
-# Format output, fix /scan/ paths
-if [ -f /scan/results.sarif ]; then
-    jq --indent 2 '
-      walk(if type == "string" then gsub("^/scan/"; "") | gsub("^/tmp/iac_scan_[0-9]+/"; "") else . end)
-    ' /scan/results.sarif > /scan/results.sarif.tmp && mv /scan/results.sarif.tmp /scan/results.sarif
-
-    TOTAL=$(jq '.runs[0].results | length' /scan/results.sarif 2>/dev/null || echo "0")
-    echo ""
-    echo "📊 IaC Results Summary:"
-    echo "   Total findings: $TOTAL"
+# Auto-dispatch
+TOOL_SCRIPT="$SCRIPT_DIR/scan-${TOOL}.sh"
+if [ ! -f "$TOOL_SCRIPT" ]; then
+    echo "[!] Unknown tool: $TOOL"
+    echo "    Available:"
+    for s in "$SCRIPT_DIR"/scan-*.sh; do
+        echo "      - $(basename "$s" | sed 's/^scan-//; s/\.sh$//')"
+    done
+    exit 1
 fi
 
-echo "✅ IaC scan complete. Results in /scan/results.sarif"
+source "$TOOL_SCRIPT"
+
+# Post-process
+ensure_sarif "${TOOL_NAME:-$TOOL}" "$RESULTS_FILE"
+fix_sarif_paths "$RESULTS_FILE"
+print_findings "$RESULTS_FILE"
+echo "✅ Scan complete"

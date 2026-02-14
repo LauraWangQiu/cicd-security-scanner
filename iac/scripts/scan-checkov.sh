@@ -1,56 +1,40 @@
 #!/bin/bash
-# Checkov IaC scanner
+# Checkov — IaC scanner
 # Called by scan.sh dispatcher — do not run directly
 set -e
 
-SCAN_PATH="${SCAN_PATH:-/scan}"
-FRAMEWORK="${FRAMEWORK:-all}"
-
-cd "$SCAN_PATH"
-
-echo "[*] Tool: Checkov"
+TOOL_NAME="Checkov"
 
 IAC_PATTERNS="*.tf *.tfvars *.yml *.yaml Dockerfile docker-compose* *.json"
 
 if [ "$SCAN_MODE" = "pr" ]; then
-    echo "[*] PR mode: scanning only changed IaC files..."
-    git fetch origin "$BASE_REF" --depth=1 2>/dev/null || true
-    CHANGED_FILES=$(git diff --name-only --diff-filter=AMRC "origin/$BASE_REF"...HEAD -- $IAC_PATTERNS 2>/dev/null || true)
-
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "[*] No IaC files changed — generating empty SARIF"
-        echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Checkov","rules":[]}},"results":[]}]}' > /scan/results.sarif
-    else
-        echo "[*] Changed IaC files:"
-        echo "$CHANGED_FILES"
+    echo "[*] PR mode: scanning changed IaC files..."
+    # shellcheck disable=SC2086
+    if get_changed_files $IAC_PATTERNS; then
+        # Checkov supports --file per file, so pass them individually
         FILE_ARGS=""
-        for f in $CHANGED_FILES; do
+        for f in "${CHANGED_FILES[@]}"; do
             [ -f "$f" ] && FILE_ARGS="$FILE_ARGS --file $f"
         done
-
         if [ -z "$FILE_ARGS" ]; then
-            echo "[*] No scannable IaC files in diff — generating empty SARIF"
-            echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","runs":[{"tool":{"driver":{"name":"Checkov","rules":[]}},"results":[]}]}' > /scan/results.sarif
+            write_empty_sarif "$TOOL_NAME" "$RESULTS_FILE"
         else
-            echo "[*] Scanning $(echo $CHANGED_FILES | wc -w) changed IaC file(s)..."
-            checkov \
-                $FILE_ARGS \
+            echo "[*] Scanning ${#CHANGED_FILES[@]} IaC file(s)..."
+            # shellcheck disable=SC2086
+            checkov $FILE_ARGS \
                 --framework "$FRAMEWORK" \
-                --output sarif \
-                --output-file-path /scan \
+                --output sarif --output-file-path /scan \
                 --soft-fail || true
+            # Checkov writes results_sarif.sarif — rename it
+            [ -f /scan/results_sarif.sarif ] && mv /scan/results_sarif.sarif "$RESULTS_FILE"
         fi
+    else
+        write_empty_sarif "$TOOL_NAME" "$RESULTS_FILE"
     fi
 else
-    checkov \
-        -d "$SCAN_PATH" \
+    checkov -d "$SCAN_PATH" \
         --framework "$FRAMEWORK" \
-        --output sarif \
-        --output-file-path /scan \
+        --output sarif --output-file-path /scan \
         --soft-fail || true
-fi
-
-# Rename output file (Checkov uses results_sarif.sarif)
-if [ -f /scan/results_sarif.sarif ]; then
-    mv /scan/results_sarif.sarif /scan/results.sarif
+    [ -f /scan/results_sarif.sarif ] && mv /scan/results_sarif.sarif "$RESULTS_FILE"
 fi

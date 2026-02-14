@@ -1,27 +1,36 @@
-# CICD Secret Scanner
+# Secret Scanner Module
 
-GitHub Action for scanning secrets in Pull Requests using [Gitleaks](https://github.com/gitleaks/gitleaks).
+Detección de secretos en repositorios usando [Gitleaks](https://github.com/gitleaks/gitleaks) y [TruffleHog](https://github.com/trufflesecurity/trufflehog).
 
-## Features
+## Características
 
-✅ **Three scan modes**: PR changes, git history, or current files  
-✅ Inline PR comments on detected secrets  
-✅ SARIF format reports  
-✅ Blocks merge if secrets found  
-✅ Uploads artifacts for audit  
+✅ **Dos herramientas** intercambiables: Gitleaks (default), TruffleHog  
+✅ **Tres modos de escaneo**: PR diff, historial git, ficheros actuales  
+✅ Comentarios inline en PRs con secretos detectados  
+✅ Reportes SARIF compatibles con GitHub Security  
+✅ Security gate: bloquea el merge si se encuentran secretos  
 
-## Scan Modes
+## Herramientas
 
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `pr` | Scans only files changed in PR | CI/CD on Pull Requests |
-| `history` | Scans entire git commit history | Full repo audit, finds secrets in old commits |
-| `files` | Scans current files on disk | Local testing, includes uncommitted changes |
-| `auto` | Auto-detects (PR in CI, files locally) | Default behavior |
+| Herramienta | Descripción | Versión |
+|-------------|-------------|---------|
+| [Gitleaks](https://github.com/gitleaks/gitleaks) | Detector rápido basado en reglas regex | 8.30.0 |
+| [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Detector con verificación activa de credenciales | 3.93.3 |
 
-## Usage
+Las versiones se definen en `tools.txt` y se instalan automáticamente.
 
-Create `.github/workflows/secrets.yaml`:
+## Modos de escaneo
+
+| Modo | Descripción | Caso de uso |
+|------|-------------|-------------|
+| `pr` | Escanea solo ficheros cambiados en PR | CI/CD en Pull Requests |
+| `history` | Escanea todo el historial de commits | Auditoría completa del repositorio |
+| `files` | Escanea ficheros actuales en disco | Testing local, incluye cambios sin commit |
+| `auto` | Auto-detecta (PR en CI, files localmente) | Comportamiento por defecto |
+
+## Uso
+
+### Como GitHub Action
 
 ```yaml
 name: Secret Scanning
@@ -35,116 +44,95 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Scan for secrets
-        uses: LauraWangQiu/cicd-security-scanner/secrets@v1
+        uses: LauraWangQiu/cicd-security-scanner/secrets@main
         with:
+          tool: 'gitleaks'      # o 'trufflehog'
+          scan_mode: 'auto'
           base_ref: main
 ```
 
-## Inputs
+### Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `base_ref` | Base branch to compare against | No | `main` |
-| `scan_mode` | Scan mode: `pr`, `history`, `files`, `auto` | No | `auto` |
+| Input | Descripción | Requerido | Default |
+|-------|-------------|-----------|---------|
+| `tool` | Herramienta: `gitleaks`, `trufflehog` | No | `gitleaks` |
+| `base_ref` | Rama base para comparación | No | `main` |
+| `scan_mode` | Modo: `pr`, `history`, `files`, `auto` | No | `auto` |
 
-## Outputs
-
-When secrets are detected:
-
-- **Artifact** - `secrets-results-<sha>` with SARIF report
-- **PR Comments** - Inline comments on affected lines
-- **Workflow Failure** - Blocks the PR with error message
-
-## Local Usage (Docker)
-
-Build the scanner image:
+### Ejecución local con Docker
 
 ```bash
-cd cicd-security-scanner/secrets
-docker build -t cicd-secret-scanner .
-```
+# Desde la raíz del repositorio cicd-security-scanner/
+docker build --build-arg MODULE=secrets -t cicd-secret-scanner .
 
-Run with different modes:
+# Escanear ficheros actuales (default)
+docker run --rm -v /path/to/repo:/scan cicd-secret-scanner
 
-```bash
-# Scan current files (default, includes uncommitted changes)
-docker run -v /path/to/repo:/scan cicd-secret-scanner
+# Escanear con TruffleHog
+docker run --rm -v /path/to/repo:/scan -e TOOL=trufflehog cicd-secret-scanner
 
-# Scan current files explicitly
-docker run -v /path/to/repo:/scan -e SCAN_MODE=files cicd-secret-scanner
-
-# Scan entire git history (all commits)
-docker run -v /path/to/repo:/scan -e SCAN_MODE=history cicd-secret-scanner
+# Escanear historial de commits
+docker run --rm -v /path/to/repo:/scan -e SCAN_MODE=history cicd-secret-scanner
 ```
 
 **Windows PowerShell:**
 ```powershell
-docker run -v C:\path\to\repo:/scan cicd-secret-scanner
-docker run -v C:\path\to\repo:/scan -e SCAN_MODE=history cicd-secret-scanner
+docker run --rm -v C:\path\to\repo:/scan cicd-secret-scanner
+docker run --rm -v C:\path\to\repo:/scan -e SCAN_MODE=history cicd-secret-scanner
 ```
 
-## Requirements
+## Salidas
 
-- GitHub Actions enabled
-- Docker available on runner (default on `ubuntu-latest`)
+Cuando se detectan secretos:
 
-## Project Structure
+- **Artefacto** — `secrets-<modo>-results-<sha>` con reporte SARIF
+- **Comentarios PR** — Comentarios inline en las líneas afectadas
+- **Workflow Failure** — Bloquea el PR con mensaje de error
+
+## ➕ Añadir otra herramienta de secretos
+
+Para añadir una nueva herramienta (ej: `detect-secrets`):
+
+1. Registrar la instalación en `shared/install-tool.sh` (un `case` con el comando de instalación)
+2. Añadir `detect-secrets <version>` a `secrets/tools.txt`
+3. Crear `secrets/scripts/scan-detect-secrets.sh` que genere SARIF en `$RESULTS_FILE`
+
+No hay que tocar el Dockerfile, ni `scan.sh`, ni `action.yaml`.
+
+## Estructura del módulo
 
 ```
-cicd-security-scanner/
-└── secrets/
-    ├── action.yaml              # Action definition
-    ├── Dockerfile               # Scanner container (Gitleaks 8.30.0)
-    ├── scripts/
-    │   ├── scan.sh              # Gitleaks execution
-    │   ├── check-secrets.sh     # SARIF results parser
-    │   └── comment-secrets.js   # PR comment generator
-    └── README.md
-```
-
-## Real Example
-
-```yaml
-name: PR Security Check
-
-on:
-  pull_request:
-    branches: [ main, develop ]
-
-jobs:
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Scan for secrets
-        uses: LauraWangQiu/cicd-security-scanner/secrets@v1
-        with:
-          base_ref: ${{ github.base_ref }}
+secrets/
+├── action.yaml              # Definición de la GitHub Action
+├── tools.txt                 # Herramientas a instalar (gitleaks, trufflehog)
+├── scripts/
+│   ├── scan.sh               # Dispatcher (auto-dispatch por $TOOL)
+│   ├── scan-gitleaks.sh      # Lógica de escaneo con Gitleaks
+│   ├── scan-trufflehog.sh    # Lógica de escaneo con TruffleHog
+│   └── comment-secrets.js    # Generador de comentarios PR
+└── README.md
 ```
 
 ## Troubleshooting
 
-**Error: "docker build not found"**
+**Los secretos que deberían detectarse no aparecen**
+- Verifica tu `.gitleaks.toml` en el repositorio
+- Asegúrate de que los patrones están habilitados
+- Prueba con `SCAN_MODE=history` para buscar en todo el historial
 
-- Use `ubuntu-latest` as the runner
-
-**Secrets that should be detected aren't being found**
-
-- Check `.gitleaks.toml` in your repository
-- Ensure patterns are enabled
-
-## License
+## Licencia
 
 MIT
 
-## Privacy & Security
+## Privacidad & Seguridad
 
-This Action:  
-✅ Only reads PR diff (no personal data collected)  
-✅ No data stored or transmitted externally  
-✅ GDPR compliant  
-✅ Open source and auditable
+Esta Action:  
+✅ Solo lee el diff del PR (no se recopilan datos personales)  
+✅ No se almacena ni transmite información externamente  
+✅ Cumple con GDPR  
+✅ Código abierto y auditable
 
-## Support
+## Soporte
 
 Issues: [GitHub Issues](https://github.com/LauraWangQiu/cicd-security-scanner/issues)  
 Email: yiwang03@ucm.es | lauraonetwo443@gmail.com

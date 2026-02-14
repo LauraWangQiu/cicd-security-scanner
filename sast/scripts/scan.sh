@@ -1,70 +1,53 @@
 #!/bin/bash
 set -e
-
 # ──────────────────────────────────────────────────────────────
-#  SAST Scanner Dispatcher
-#  Selects the scanning tool based on the TOOL environment variable.
-#  Supported tools: semgrep (default), bandit
-#  To add a new tool, create scripts/scan-<toolname>.sh and add
-#  it to the case below and the Dockerfile.
+#  SAST Scanner — Dispatcher
+#  Tools: semgrep (default), bandit
 # ──────────────────────────────────────────────────────────────
 
 TOOL="${TOOL:-semgrep}"
 SCAN_PATH="${SCAN_PATH:-/scan}"
-SEVERITY="${SEVERITY:-ERROR,WARNING}"
 SCAN_MODE="${SCAN_MODE:-full}"
 BASE_REF="${GITHUB_BASE_REF:-main}"
+SEVERITY="${SEVERITY:-ERROR,WARNING}"
+RESULTS_FILE="/scan/results.sarif"
+SCRIPT_DIR="/scripts"
 
-echo "🔍 SAST Scanner"
-echo "   Tool: $TOOL"
-echo "   Mode: $SCAN_MODE"
+source "$SCRIPT_DIR/helpers.sh"
 
 git config --global --add safe.directory "$SCAN_PATH"
 cd "$SCAN_PATH"
 
-export SCAN_MODE BASE_REF SCAN_PATH SEVERITY
+export SCAN_MODE BASE_REF SCAN_PATH SEVERITY RESULTS_FILE
 
-SCRIPT_DIR="/scripts"
+echo "🔍 SAST Scanner"
+echo "   Tool: $TOOL | Mode: $SCAN_MODE"
 
-# Dispatch to tool-specific script
-case "$TOOL" in
-    semgrep)
-        source "$SCRIPT_DIR/scan-semgrep.sh"
-        ;;
-    bandit)
-        source "$SCRIPT_DIR/scan-bandit.sh"
-        ;;
-    *)
-        echo "[!] Unknown TOOL: $TOOL"
-        echo "    Supported tools: semgrep, bandit"
-        echo ""
-        echo "    To add a new tool:"
-        echo "      1. Create scripts/scan-<toolname>.sh"
-        echo "      2. Add it to the case in scan.sh"
-        echo "      3. Install it in the Dockerfile"
-        exit 1
-        ;;
-esac
-
-# Post-process SARIF: fix paths, remove duplicates with other scanners
-if [ -f /scan/results.sarif ]; then
-    jq --indent 2 '
-      # Remove results handled by dedicated scanners (secrets, IaC, containers)
-      .runs[].results |= [.[] | select(
-        (.ruleId | test("secrets") | not) and
-        (.ruleId | test("^yaml\\.docker-compose\\.") | not) and
-        (.ruleId | test("^yaml\\.kubernetes\\.") | not) and
-        (.ruleId | test("^terraform\\.") | not)
-      )] |
-      # Fix /scan/ paths to relative paths
-      walk(if type == "string" then gsub("^/scan/"; "") else . end)
-    ' /scan/results.sarif > /scan/results.sarif.tmp && mv /scan/results.sarif.tmp /scan/results.sarif
-    
-    TOTAL=$(jq '.runs[0].results | length' /scan/results.sarif 2>/dev/null || echo "0")
-    
-    echo ""
-    echo "📊 SAST Results Summary:"
-    echo "   Total findings: $TOTAL"
+# Auto-dispatch
+TOOL_SCRIPT="$SCRIPT_DIR/scan-${TOOL}.sh"
+if [ ! -f "$TOOL_SCRIPT" ]; then
+    echo "[!] Unknown tool: $TOOL"
+    echo "    Available:"
+    for s in "$SCRIPT_DIR"/scan-*.sh; do
+        echo "      - $(basename "$s" | sed 's/^scan-//; s/\.sh$//')"
+    done
+    exit 1
 fi
 
-echo "✅ SAST scan complete. Results in /scan/results.sarif"
+source "$TOOL_SCRIPT"
+
+# Post-process: remove cross-scanner duplicates (secrets/IaC/containers)
+if [ -f "$RESULTS_FILE" ]; then
+    jq --indent 2 '
+      .runs[].results |= [.[] | select(
+        (.ruleId | test("secrets") | not) and
+        (.ruleId | test("^yaml\\.(docker-compose|kubernetes)\\.") | not) and
+        (.ruleId | test("^terraform\\.") | not)
+      )]
+    ' "$RESULTS_FILE" > "${RESULTS_FILE}.tmp" && mv "${RESULTS_FILE}.tmp" "$RESULTS_FILE"
+fi
+
+ensure_sarif "${TOOL_NAME:-$TOOL}" "$RESULTS_FILE"
+fix_sarif_paths "$RESULTS_FILE"
+print_findings "$RESULTS_FILE"
+echo "✅ Scan complete"

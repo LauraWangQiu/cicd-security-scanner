@@ -1,0 +1,3 @@
+# SAST tools
+semgrep 1.151.0
+bandit 1.9.3
