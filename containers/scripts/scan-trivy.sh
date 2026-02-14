@@ -8,7 +8,15 @@ TOOL_NAME="Trivy"
 # Tool-specific: how to scan a single image
 scan_image() {
     local img="$1" outfile="$2"
-    trivy image --severity "$SEVERITY" --format sarif --output "$outfile" "$img" || true
+    # Save the image to a tar and scan the tar with Trivy's --input option.
+    # This avoids issues where Trivy extracts a temporary docker image tar and
+    # finds missing blobs when the daemon/BuildKit produced a layout that
+    # doesn't match the temporary tar content.
+    local tmp
+    tmp=$(mktemp -u "/tmp/scan-XXXXXX.tar")
+    docker save "$img" -o "$tmp" 2>/dev/null || { echo "[!] docker save failed for $img"; return; }
+    trivy image --input "$tmp" --severity "$SEVERITY" --format sarif --output "$outfile" || true
+    rm -f "$tmp"
 }
 
 # ── Main logic ───────────────────────────────────────────────
