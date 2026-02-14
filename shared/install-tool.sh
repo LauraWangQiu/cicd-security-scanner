@@ -20,6 +20,24 @@ TOOLS_FILE="${1:?Usage: install-tool.sh <tools.txt>}"
 install_one() {
     local tool="$1" version="$2"
 
+    # Sanitize inputs (strip CR/LF and surrounding whitespace)
+    tool="$(printf '%s' "$tool" | tr -d '\r' )"
+    version="$(printf '%s' "$version" | tr -d '\r' )"
+    tool="${tool#${tool%%[![:space:]]*}}"
+    tool="${tool%${tool##*[![:space:]]}}"
+    version="${version#${version%%[![:space:]]*}}"
+    version="${version%${version##*[![:space:]]}}"
+
+    # Require explicit versions for tarball-based installers to avoid malformed URLs
+    case "$tool" in
+        gitleaks|trufflehog|trivy|grype)
+            if [ -z "$version" ]; then
+                echo "[!] $tool requires a version in tools.txt (e.g. '$tool 8.30.0')"
+                exit 1
+            fi
+            ;;
+    esac
+
     case "$tool" in
         # ── Secret scanners ──────────────────────────────────
         gitleaks)
@@ -71,11 +89,20 @@ install_one() {
     echo "[+] Installed $tool ${version:-latest}"
 }
 
-# ── Parse tools.txt and install each entry ────────────────────
+# ── Parse tools.txt and install each entry (robust parsing)
 echo "=== Installing tools ==="
-while IFS=' ' read -r tool version || [ -n "$tool" ]; do
-    # Skip comments and empty lines
-    [[ -z "$tool" || "$tool" == \#* ]] && continue
+while IFS= read -r line || [ -n "$line" ]; do
+    # Remove CR, strip comments and trim whitespace
+    line="$(printf '%s' "$line" | tr -d '\r')"
+    line="${line%%#*}"
+    line="${line#${line%%[![:space:]]*}}"
+    line="${line%${line##*[![:space:]]}}"
+    [ -z "$line" ] && continue
+
+    # Split into tool and optional version
+    set -- $line
+    tool="$1"
+    version="$2"
     install_one "$tool" "$version"
 done < "$TOOLS_FILE"
 echo "=== All tools installed ==="

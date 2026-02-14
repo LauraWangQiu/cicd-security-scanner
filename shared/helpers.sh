@@ -41,15 +41,21 @@ print_findings() {
 fix_sarif_paths() {
     [ ! -f "$1" ] && return
         jq --indent 2 '
-            walk(if type == "string" then
-                # Remove repo scan root (/scan/) and temp directories
-                gsub("^/scan/"; "")
-                | gsub("^/tmp/[a-z_]+[0-9]*/"; "")
-                # Strip any non-file URI scheme prefix like "scanner-build:..." or "image:..."
-                | gsub("^[^:]+:"; "")
-                # Remove any leading file:// or leading slashes left behind
-                | gsub("^file://"; "") | gsub("^/+"; "")
-            else . end)
+            walk(
+                if type == "string" then
+                    (
+                        .
+                        # Remove repo scan root (/scan/) and temp directories
+                        | gsub("^/scan/"; "")
+                        | gsub("^/tmp/[a-z_]+[0-9]*/"; "")
+                    )
+                    # If the string begins with a URI scheme but NOT http/https/file,
+                    # strip that leading custom scheme (e.g. "scanner-build:").
+                    | (if test("^[a-zA-Z][a-zA-Z0-9+.-]*:") and (test("^(https?|file):") | not) then gsub("^[^:]+:"; "") else . end)
+                    # Remove any leading file:// (if present) and trim leading slashes
+                    | gsub("^file://"; "") | gsub("^/+"; "")
+                else . end
+            )
         ' "$1" > "${1}.tmp" && mv "${1}.tmp" "$1"
 }
 
