@@ -154,7 +154,9 @@ build_images() {
         local tag="scanner-build:image-${i}"
         local ctx; ctx="$(dirname "$df")"
         echo "[*] Building $df -> $tag"
-        if docker build -f "$df" -t "$tag" "$ctx" 2>&1; then
+        # Force legacy builder to avoid BuildKit OCI-layout issues with
+        # docker save + Trivy (missing deduplicated blobs in exported tar).
+        if DOCKER_BUILDKIT=0 docker build -f "$df" -t "$tag" "$ctx" 2>&1; then
             BUILT_IMAGES+=("$tag")
         else
             echo "[!] Build failed for $df, skipping"
