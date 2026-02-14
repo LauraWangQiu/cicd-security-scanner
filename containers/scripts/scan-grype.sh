@@ -5,10 +5,20 @@ set -e
 
 TOOL_NAME="Grype"
 
-# Tool-specific: how to scan a single image
+# Tool-specific: how to scan a single image.
+# $1 can be a rootfs directory (fallback), a tar file (buildx), or an image name/tag.
 scan_image() {
     local img="$1" outfile="$2"
-    grype "$img" -o sarif --file "$outfile" 2>/dev/null || true
+    if [ -d "$img" ]; then
+        # Extracted root filesystem (fallback: docker export + tar -x)
+        grype "dir:${img}" -o sarif --file "$outfile" 2>/dev/null || true
+    elif [ -f "$img" ]; then
+        # Tar file (from buildx --output type=docker,dest=<file>)
+        grype "docker-archive:${img}" -o sarif --file "$outfile" 2>/dev/null || true
+    else
+        # Image name/tag — scan from daemon
+        grype "$img" -o sarif --file "$outfile" 2>/dev/null || true
+    fi
 }
 
 # ── Main logic ───────────────────────────────────────────────

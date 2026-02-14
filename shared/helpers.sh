@@ -142,22 +142,72 @@ discover_dockerfiles() {
     return 0
 }
 
-# Build a Docker image per Dockerfile.
+# Build a Docker image per Dockerfile and export to a self-contained tar.
+# Uses `docker buildx build --output type=docker` so the tar is written
+# directly during the build — this completely avoids `docker save`, which
+# produces incomplete OCI tars when Docker uses the containerd image store
+# (Docker 25+) and causes Trivy / Grype to fail with missing-blob errors.
+#
+# Falls back to docker export + rootfs extraction if buildx is unavailable.
+#
 # Usage: build_images "${DOCKERFILES[@]}"
-# Sets:  BUILT_IMAGES (array)
+# Sets:  BUILT_IMAGES (array of tar file paths or rootfs directories)
 build_images() {
     BUILT_IMAGES=()
+    BUILT_IMAGES_DIR="/tmp/scanner-images"
+    mkdir -p "$BUILT_IMAGES_DIR"
+
+    # Try to set up a buildx builder with docker-container driver.
+    # This is required for --output type=docker,dest=<file>.
+    local USE_BUILDX=false
+    local BUILDER_NAME="scanner-builder"
+    if command -v docker >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
+        if ! docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1; then
+            echo "[*] Creating buildx builder: $BUILDER_NAME"
+            if docker buildx create --name "$BUILDER_NAME" --driver docker-container >/dev/null 2>&1; then
+                USE_BUILDX=true
+            fi
+        else
+            USE_BUILDX=true
+        fi
+    fi
+
     local i=0
     for df in "$@"; do
         [ ! -f "$df" ] && { echo "[!] $df not found, skipping"; continue; }
         i=$((i+1))
         local tag="scanner-build:image-${i}"
         local ctx; ctx="$(dirname "$df")"
-        echo "[*] Building $df -> $tag"
-        # Force legacy builder to avoid BuildKit OCI-layout issues with
-        # docker save + Trivy (missing deduplicated blobs in exported tar).
+
+        if $USE_BUILDX; then
+            # Primary: buildx --output produces a complete Docker V2 tar
+            local tarfile="${BUILT_IMAGES_DIR}/image-${i}.tar"
+            echo "[*] Building $df -> $tarfile (buildx)"
+            if docker buildx build --builder "$BUILDER_NAME" \
+                 -f "$df" -t "$tag" \
+                 --output "type=docker,dest=${tarfile}" "$ctx" 2>&1; then
+                BUILT_IMAGES+=("$tarfile")
+                continue
+            fi
+            echo "[!] Buildx export failed, falling back to docker export..."
+        fi
+
+        # Fallback: docker build + docker create + docker export -> rootfs dir.
+        # docker export is NOT affected by the containerd image store bug.
+        local rootfs="${BUILT_IMAGES_DIR}/rootfs-${i}"
+        echo "[*] Building $df -> $rootfs (docker export)"
         if DOCKER_BUILDKIT=0 docker build -f "$df" -t "$tag" "$ctx" 2>&1; then
-            BUILT_IMAGES+=("$tag")
+            local cid
+            cid=$(docker create "$tag" true 2>/dev/null) || true
+            if [ -n "$cid" ]; then
+                mkdir -p "$rootfs"
+                docker export "$cid" | tar -xf - -C "$rootfs" 2>/dev/null
+                docker rm "$cid" >/dev/null 2>&1 || true
+                docker rmi "$tag" >/dev/null 2>&1 || true
+                BUILT_IMAGES+=("$rootfs")
+            else
+                echo "[!] Failed to create container from $tag"
+            fi
         else
             echo "[!] Build failed for $df, skipping"
         fi
@@ -165,9 +215,11 @@ build_images() {
     echo "[*] Built ${#BUILT_IMAGES[@]} image(s)"
 }
 
-# Remove images created by build_images.
+# Remove tars/images/rootfs dirs created by build_images.
 cleanup_images() {
-    for img in "${BUILT_IMAGES[@]}"; do docker rmi "$img" 2>/dev/null || true; done
+    [ -d "${BUILT_IMAGES_DIR:-}" ] && rm -rf "$BUILT_IMAGES_DIR"
+    # Remove the buildx builder container (if created)
+    docker buildx rm scanner-builder >/dev/null 2>&1 || true
 }
 
 # Scan all BUILT_IMAGES using the tool-specific scan_image() function.

@@ -79,7 +79,13 @@ install_one() {
                 | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
             chmod +x /usr/local/bin/docker
             ;;
-
+        docker-buildx)
+            local bx_ver="${version:-0.19.3}"
+            mkdir -p /usr/lib/docker/cli-plugins
+            curl -sSfL "https://github.com/docker/buildx/releases/download/v${bx_ver}/buildx-v${bx_ver}.linux-amd64" \
+                -o /usr/lib/docker/cli-plugins/docker-buildx
+            chmod +x /usr/lib/docker/cli-plugins/docker-buildx
+            ;;
         *)
             echo "[!] Unknown tool: $tool"
             exit 1

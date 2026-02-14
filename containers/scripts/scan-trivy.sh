@@ -5,33 +5,23 @@ set -e
 
 TOOL_NAME="Trivy"
 
-# Tool-specific: how to scan a single image
+# Tool-specific: how to scan a single image.
+# $1 can be a rootfs directory (fallback), a tar file (buildx), or an image name/tag.
 scan_image() {
     local img="$1" outfile="$2"
-    # Docker 25+ with the containerd image store exports OCI-layout tars
-    # (index.json + blobs/sha256/).  Trivy can read OCI *directories* but NOT
-    # OCI tars — it either finds missing dedup'd blobs or fails the "not a
-    # directory" stat on index.json.  Fix: docker save → extract to temp dir
-    # → scan the directory.
-    local tmptar tmpdir
-    tmptar=$(mktemp "/tmp/trivy-img-XXXXXX.tar")
-    tmpdir=$(mktemp -d "/tmp/trivy-img-XXXXXX")
-    if ! docker save "$img" -o "$tmptar" 2>/dev/null; then
-        echo "[!] docker save failed for $img — falling back to daemon scan"
-        rm -f "$tmptar"; rm -rf "$tmpdir"
-        trivy image --severity "$SEVERITY" --format sarif --output "$outfile" "$img" || true
-        return
+    if [ -d "$img" ]; then
+        # Extracted root filesystem (fallback: docker export + tar -x)
+        trivy rootfs --severity "$SEVERITY" \
+            --format sarif --output "$outfile" "$img" || true
+    elif [ -f "$img" ]; then
+        # Tar file (from buildx --output type=docker,dest=<file>)
+        trivy image --input "$img" --severity "$SEVERITY" \
+            --format sarif --output "$outfile" || true
+    else
+        # Image name/tag — scan from daemon
+        trivy image --severity "$SEVERITY" \
+            --format sarif --output "$outfile" "$img" || true
     fi
-    if ! tar -xf "$tmptar" -C "$tmpdir" 2>/dev/null; then
-        echo "[!] tar extract failed — falling back to scanning the tar directly"
-        rm -rf "$tmpdir"
-        trivy image --input "$tmptar" --severity "$SEVERITY" --format sarif --output "$outfile" || true
-        rm -f "$tmptar"
-        return
-    fi
-    rm -f "$tmptar"
-    trivy image --input "$tmpdir" --severity "$SEVERITY" --format sarif --output "$outfile" || true
-    rm -rf "$tmpdir"
 }
 
 # ── Main logic ───────────────────────────────────────────────
