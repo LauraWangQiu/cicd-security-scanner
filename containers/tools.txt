@@ -1,5 +1,5 @@
 # Container scanning tools
 docker-cli
-docker-buildx 0.19.3
+docker-buildx 0.31.1
 trivy 0.69.1
 grype 0.108.0
