@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Tool installer (central registry)
 COPY shared/install-tool.sh /scripts/install-tool.sh
-RUN chmod +x /scripts/install-tool.sh
+RUN sed -i 's/\r$//' /scripts/install-tool.sh && chmod +x /scripts/install-tool.sh
 
 # Install module-specific tools listed in tools.txt
 COPY ${MODULE}/tools.txt /tmp/tools.txt
