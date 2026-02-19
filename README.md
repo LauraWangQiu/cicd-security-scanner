@@ -220,7 +220,7 @@ make sast       # build sast scanner
 make all        # build all scanners
 ```
 
-## � Añadir una nueva herramienta
+## ➕ Añadir una nueva herramienta
 
 La plataforma está diseñada para ser extensible. Para añadir una nueva herramienta a cualquier módulo:
 
@@ -247,7 +247,7 @@ La plataforma está diseñada para ser extensible. Para añadir una nueva herram
 
 > Todas las herramientas deben generar SARIF para que los comentarios en PR, subida de artefactos y security gate funcionen sin cambios.
 
-## �📊 Salidas
+## 📊 Salidas
 
 Todos los módulos generan un `results.sarif` en formato SARIF 2.1.0:
 
@@ -267,19 +267,8 @@ Ver README de cada módulo para opciones específicas:
 
 ## 🧪 Validación
 
-Probado contra repositorios vulnerables:
-- [OWASP Juice Shop](https://github.com/juice-shop/juice-shop)
-- [CICD-Goat](https://github.com/cider-security-research/cicd-goat)
-- [Damn Vulnerable Web Application](https://github.com/digininja/DVWA)
-
-## 📈 Métricas de Evaluación
-
-| Métrica | Descripción |
-|---------|-------------|
-| Detección (Recall) | % de vulnerabilidades conocidas detectadas |
-| Precisión | % de hallazgos que son verdaderos positivos |
-| Tiempo de ejecución | Segundos por análisis |
-| Tasa de FP | Falsos positivos por 1000 líneas de código |
+Probado en:
+- [Vulnerable Test App](https://github.com/LauraWangQiu/vulnerable-test-app)
 
 ## 🔒 Seguridad de la Plataforma
 
